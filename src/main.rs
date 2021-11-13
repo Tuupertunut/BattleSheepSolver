@@ -16,6 +16,7 @@ fn main() {
             .expect("Input contained illegal characters");
     }
     let board = parse_board(&input_buffer).expect("Input is not a valid board");
+    println!("{}", write_board(&board));
 }
 
 fn parse_board(input: &str) -> Result<Vec<Vec<Tile>>, Box<dyn Error>> {
@@ -52,4 +53,23 @@ fn parse_board(input: &str) -> Result<Vec<Vec<Tile>>, Box<dyn Error>> {
     }
 
     return Ok(rows);
+}
+
+fn write_board(board: &Vec<Vec<Tile>>) -> String {
+    let mut output = String::new();
+
+    for row in board {
+        for tile in row {
+            let tile_string = match tile {
+                &Tile::NoTile => format!("    "),
+                &Tile::Empty => format!(" 0  "),
+                &Tile::MaxStack(stack_size) => format!("+{:<3}", stack_size),
+                &Tile::MinStack(stack_size) => format!("-{:<3}", stack_size),
+            };
+            output.push_str(&tile_string);
+        }
+        output.push_str("\n")
+    }
+
+    return output;
 }
