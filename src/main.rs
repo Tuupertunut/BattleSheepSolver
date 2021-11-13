@@ -1,5 +1,6 @@
 use std::error::Error;
 
+#[derive(Debug)]
 enum Tile {
     NoTile, /* outside of the board */
     Empty,
@@ -72,4 +73,23 @@ fn write_board(board: &Vec<Vec<Tile>>) -> String {
     }
 
     return output;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn output_equals_input() {
+        let input = " 0  +2       0  \
+                   \n-1   0  -3  +2  \
+                   \n     0  \
+                   \n";
+        assert_eq!(input, write_board(&parse_board(input).unwrap()));
+    }
+
+    #[test]
+    fn parse_fails_on_invalid_board() {
+        assert!(parse_board("abcdefg").is_err());
+    }
 }
