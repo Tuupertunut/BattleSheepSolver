@@ -1,6 +1,6 @@
 use std::error::Error;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Tile {
     NoTile, /* outside of the board */
     Empty,
@@ -18,6 +18,61 @@ fn main() {
     }
     let board = parse_board(&input_buffer).expect("Input is not a valid board");
     println!("{}", write_board(&board));
+    println!("possible moves");
+    for next_board in possible_moves(&board) {
+        println!("{}", write_board(&next_board));
+    }
+}
+
+fn possible_moves(board: &Vec<Vec<Tile>>) -> Vec<Vec<Vec<Tile>>> {
+    let mut next_boards = Vec::<Vec<Vec<Tile>>>::new();
+
+    /* r = row coordinate, q = column coordinate */
+    for (from_r, row) in board.iter().enumerate() {
+        for (from_q, tile) in row.iter().enumerate() {
+            if let Tile::MaxStack(size) = tile {
+                if *size > 1 {
+                    /* Loop through all straight line directions. */
+                    for (dir_r, dir_q) in [(0, 1), (1, 1), (1, 0), (0, -1), (-1, -1), (-1, 0)] {
+                        /* Move to a direction as far as there are empty tiles. */
+                        let mut r = from_r;
+                        let mut q = from_q;
+                        loop {
+                            /* Coordinates for the next tile in the direction.
+                             * Hack: negative numbers cannot be added to a usize, so they are
+                             * converted into usize with underflow and then added with overflow.
+                             * Same as: let next_r = r + dir_r */
+                            let next_r = r.wrapping_add(dir_r as usize);
+                            let next_q = q.wrapping_add(dir_q as usize);
+
+                            /* If next tile is empty, move to that tile. */
+                            if next_r < board.len()
+                                && next_q < board[next_r].len()
+                                && board[next_r][next_q] == Tile::Empty
+                            {
+                                r = next_r;
+                                q = next_q;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        /* Check if we actually found any empty tiles in the direction. */
+                        if r != from_r || q != from_q {
+                            for split in 1..*size {
+                                let mut next_board = board.clone();
+                                next_board[r][q] = Tile::MaxStack(split);
+                                next_board[from_r][from_q] = Tile::MaxStack(size - split);
+                                next_boards.push(next_board);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return next_boards;
 }
 
 fn parse_board(input: &str) -> Result<Vec<Vec<Tile>>, Box<dyn Error>> {
