@@ -140,6 +140,8 @@ mod tests {
 
     #[test]
     fn output_equals_input() {
+        /* Multiline strings are not indented correctly because the indentation would change the
+         * string content. */
         let input = &"
  0  +2  
 -2   0  -3  +3  
