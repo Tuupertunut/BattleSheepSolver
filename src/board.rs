@@ -1,12 +1,12 @@
 use std::error::Error;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum Player {
     Min,
     Max,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum Tile {
     NoTile, /* outside of the board */
     Empty,
@@ -18,6 +18,7 @@ pub enum Tile {
 pub const NEIGHBOR_OFFSETS: [(isize, isize); 6] =
     [(0, 1), (1, 1), (1, 0), (0, -1), (-1, -1), (-1, 0)];
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct Board(Vec<Vec<Tile>>);
 
 impl Board {
@@ -135,18 +136,62 @@ impl Board {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn output_equals_input() {
-        let input = " 0  +2       0  \
-                   \n-1   0  -3  +2  \
-                   \n     0  \
-                   \n";
+        let input = &"
+ 0  +2  
+-2   0  -3  +3  
+     0           0  
+"[1..];
         assert_eq!(input, Board::parse(input).unwrap().write());
     }
 
     #[test]
     fn parse_fails_on_invalid_board() {
         assert!(Board::parse("abcdefg").is_err());
+    }
+
+    #[test]
+    fn possible_moves_are_found() {
+        let input = &"
+ 0  +2  
+-2   0  -3  +3  
+     0           0  
+"[1..];
+        let max_moves = [
+            &"
++1  +1  
+-2   0  -3  +3  
+     0           0  
+"[1..],
+            &"
+ 0  +1  
+-2   0  -3  +3  
+    +1           0  
+"[1..],
+            &"
+ 0  +2  
+-2   0  -3  +2  
+     0          +1  
+"[1..],
+            &"
+ 0  +2  
+-2   0  -3  +1  
+     0          +2  
+"[1..],
+        ];
+        assert_eq!(
+            Board::parse(input)
+                .unwrap()
+                .possible_moves(Player::Max)
+                .into_iter()
+                .collect::<HashSet<Board>>(),
+            max_moves
+                .iter()
+                .map(|s| Board::parse(s).unwrap())
+                .collect::<HashSet<Board>>()
+        );
     }
 }
