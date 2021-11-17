@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "BattleSheepSolver"
+name = "battle_sheep_solver"
 version = "0.1.0"
