@@ -12,8 +12,10 @@ fn main() {
     }
     let board = Board::parse(&input_buffer).expect("Input is not a valid board");
     println!("{}", board.write());
+    println!("{}", board.evaluate());
     println!("possible moves");
     for next_board in board.possible_moves(Player::Max) {
         println!("{}", next_board.write());
+        println!("{}", next_board.evaluate());
     }
 }

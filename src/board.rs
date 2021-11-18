@@ -131,6 +131,45 @@ impl Board {
 
         return next_boards;
     }
+
+    /* Evaluates the current board state. Positive number means Max has an advantage, negative means
+     * Min has it. This is a very simple evaluation function that checks how blocked the stacks are
+     * by their neighbors. */
+    pub fn evaluate(&self) -> i32 {
+        let Board(board) = self;
+
+        let mut value = 0;
+        for (r, row) in board.iter().enumerate() {
+            for (q, &tile) in row.iter().enumerate() {
+                if let Tile::Stack(player, size) = tile {
+                    /* A maximum of 6 directions are blocked. */
+                    let mut blocked_directions = 6;
+                    for (offset_r, offset_q) in NEIGHBOR_OFFSETS {
+                        let neighbor_r = r.wrapping_add(offset_r as usize);
+                        let neighbor_q = q.wrapping_add(offset_q as usize);
+                        if neighbor_r < board.len()
+                            && neighbor_q < board[neighbor_r].len()
+                            && board[neighbor_r][neighbor_q] == Tile::Empty
+                        {
+                            blocked_directions -= 1;
+                        }
+                    }
+
+                    /* Being surrounded from more sides and having more sheep in the stack increase
+                     * its blocked score. */
+                    let blocked_score = (size as i32 - 1) * blocked_directions;
+
+                    /* A blocked Min stack gives an advantage to Max and therefore increases the
+                     * value of the board. Vice versa for Max. */
+                    match player {
+                        Player::Min => value += blocked_score,
+                        Player::Max => value -= blocked_score,
+                    }
+                }
+            }
+        }
+        return value;
+    }
 }
 
 #[cfg(test)]
