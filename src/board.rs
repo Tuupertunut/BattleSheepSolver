@@ -61,15 +61,26 @@ impl Board {
     pub fn write(&self) -> String {
         let Board(board) = self;
 
+        /* Ansi escape sequences for terminal colors. A colored text starts with a color sequence
+         * and ends with a reset sequence. */
+        const GREEN: &str = "\u{001b}[32m";
+        const RED: &str = "\u{001b}[31;1m";
+        const BLUE: &str = "\u{001b}[34;1m";
+        const RESET: &str = "\u{001b}[0m";
+
         let mut output = String::new();
 
         for row in board {
             for &tile in row {
                 let tile_string = match tile {
                     Tile::NoTile => format!("    "),
-                    Tile::Empty => format!(" 0  "),
-                    Tile::Stack(Player::Max, stack_size) => format!("+{:<3}", stack_size),
-                    Tile::Stack(Player::Min, stack_size) => format!("-{:<3}", stack_size),
+                    Tile::Empty => format!("{} 0  {}", GREEN, RESET),
+                    Tile::Stack(Player::Max, stack_size) => {
+                        format!("{}+{:<3}{}", BLUE, stack_size, RESET)
+                    }
+                    Tile::Stack(Player::Min, stack_size) => {
+                        format!("{}-{:<3}{}", RED, stack_size, RESET)
+                    }
                 };
                 output.push_str(&tile_string);
             }
