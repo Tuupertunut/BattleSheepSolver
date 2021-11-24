@@ -13,6 +13,7 @@ fn main() {
             .expect("Input contained illegal characters");
     }
     let mut board = Board::parse(&input_buffer).expect("Input is not a valid board");
+    println!("{}", board.write(true));
 
     for &player in [Player::Min, Player::Max].iter().cycle() {
         let start_time = Instant::now();
@@ -36,11 +37,11 @@ fn main() {
             None => break,
             Some(next_board) => {
                 println!(
-                    "took {:?}, evaluated {} boards, value {}\n{}",
+                    "\ntook {:?}, evaluated {} boards, value {}\n{}",
                     start_time.elapsed(),
                     count,
                     value,
-                    next_board.write()
+                    next_board.write(true)
                 );
                 board = next_board;
             }
