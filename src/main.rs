@@ -21,14 +21,14 @@ fn main() {
             Player::Min => min_choose(&board, |board_1| {
                 max_value(board_1, |board_2| {
                     min_value(board_2, |board_3| {
-                        max_value(board_3, |board_4| (board_4.evaluate(), 1))
+                        max_value(board_3, |board_4| (board_4.heuristic_evaluate(), 1))
                     })
                 })
             }),
             Player::Max => max_choose(&board, |board_1| {
                 min_value(board_1, |board_2| {
                     max_value(board_2, |board_3| {
-                        min_value(board_3, |board_4| (board_4.evaluate(), 1))
+                        min_value(board_3, |board_4| (board_4.heuristic_evaluate(), 1))
                     })
                 })
             }),
@@ -61,7 +61,7 @@ where
         count += next_board_count;
     }
     if value == i32::MAX {
-        value = board.evaluate();
+        value = board.heuristic_evaluate();
         count += 1;
     }
     return (value, count);
@@ -79,7 +79,7 @@ where
         count += next_board_count;
     }
     if value == i32::MIN {
-        value = board.evaluate();
+        value = board.heuristic_evaluate();
         count += 1;
     }
     return (value, count);
@@ -101,7 +101,7 @@ where
         count += next_board_count;
     }
     if value == i32::MAX {
-        value = board.evaluate();
+        value = board.heuristic_evaluate();
         count += 1;
     }
     return (chosen_move, value, count);
@@ -123,7 +123,7 @@ where
         count += next_board_count;
     }
     if value == i32::MIN {
-        value = board.evaluate();
+        value = board.heuristic_evaluate();
         count += 1;
     }
     return (chosen_move, value, count);

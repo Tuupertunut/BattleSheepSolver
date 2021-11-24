@@ -194,7 +194,7 @@ impl Board {
     /* Evaluates the current board state. Positive number means Max has an advantage, negative means
      * Min has it. This is a very simple evaluation function that checks how blocked the stacks are
      * by their neighbors. */
-    pub fn evaluate(&self) -> i32 {
+    pub fn heuristic_evaluate(&self) -> i32 {
         let Board(board) = self;
 
         let mut value = 0;
@@ -298,6 +298,76 @@ mod tests {
                 .iter()
                 .map(|s| Board::parse(s).unwrap())
                 .collect::<HashSet<Board>>()
+        );
+    }
+
+    #[test]
+    fn win_evaluates_as_winners_advantage() {
+        let max_wins = "
+  +14 +1   0   0  
+-15 +1  -1   0  
+"
+        .trim_matches('\n');
+        assert!(Board::parse(max_wins).unwrap().heuristic_evaluate() > 0);
+    }
+
+    #[test]
+    fn end_with_equal_controlled_tiles_considers_field_size() {
+        let max_has_greater_field = "
+  +15 -1   0   0  
+-15 +1   0   0  
+"
+        .trim_matches('\n');
+        assert!(
+            Board::parse(max_has_greater_field)
+                .unwrap()
+                .heuristic_evaluate()
+                > 0
+        );
+    }
+
+    #[test]
+    fn draw_evaluates_as_zero() {
+        let draw = "
+  +1   0  -1  +14  
+-14 +1   0  -1  
+"
+        .trim_matches('\n');
+        assert!(Board::parse(draw).unwrap().heuristic_evaluate() == 0);
+    }
+
+    #[test]
+    fn in_end_tile_count_weighs_more_than_field_size() {
+        let min_wins = "
+             0   0  
+  +8  -1   0  -1  
+-14 +8  
+"
+        .trim_matches('\n');
+        assert!(Board::parse(min_wins).unwrap().heuristic_evaluate() < 0);
+    }
+
+    #[test]
+    fn win_evaluates_higher_than_continuing_game() {
+        let min_wins = "
+     0  
+   0   0   0  
+     0   0  
+  -15 
++16 -1   0   0   0   0   0   0   0   0  
+"
+        .trim_matches('\n');
+        let min_will_lose = "
+     0  
+   0  -15  0  
+     0   0  
+  -1  
++16  0   0   0   0   0   0   0   0   0  
+"
+        .trim_matches('\n');
+        assert!(
+            Board::parse(min_wins).unwrap().heuristic_evaluate()
+                < Board::parse(min_will_lose).unwrap().heuristic_evaluate()
         );
     }
 }
