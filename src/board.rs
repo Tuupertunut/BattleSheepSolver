@@ -1,4 +1,6 @@
+use std::collections::HashSet;
 use std::error::Error;
+use std::ops::{Index, IndexMut};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum Player {
@@ -36,7 +38,58 @@ fn unindent(rows: Vec<String>) -> Vec<String> {
     return unindented;
 }
 
+impl Index<(usize, usize)> for Board {
+    type Output = Tile;
+
+    fn index(&self, (r, q): (usize, usize)) -> &Self::Output {
+        let Board(board) = self;
+
+        /* r = row coordinate, q = column coordinate
+         * Return the tile for all valid coords in the board, but also return NoTile for all coords
+         * outside the board. This way the indexing operation never panics. */
+        if r < board.len() && q < board[r].len() {
+            return &board[r][q];
+        } else {
+            return &Tile::NoTile;
+        }
+    }
+}
+
+impl IndexMut<(usize, usize)> for Board {
+    fn index_mut(&mut self, (r, q): (usize, usize)) -> &mut Self::Output {
+        let Board(board) = self;
+
+        return &mut board[r][q];
+    }
+}
+
 impl Board {
+    /* Iterates through all tiles in row-major order. */
+    pub fn iter_row_major(&self) -> impl Iterator<Item = ((usize, usize), &Tile)> {
+        let Board(board) = self;
+
+        return board
+            .iter()
+            .enumerate()
+            .flat_map(|(r, row)| row.iter().enumerate().map(move |(q, tile)| ((r, q), tile)));
+    }
+
+    /* Iterates through all neighbors of the given coordinates. */
+    pub fn iter_neighbor_coords((r, q): (usize, usize)) -> impl Iterator<Item = (usize, usize)> {
+        return NEIGHBOR_OFFSETS.iter().map(move |&(offset_r, offset_q)| {
+            /* Hack: negative numbers cannot be added to a usize, so they are converted into usize
+             * with underflow and then added with overflow.
+             * Same as:
+             * r + offset_r
+             * q + offset_q */
+            (
+                r.wrapping_add(offset_r as usize),
+                q.wrapping_add(offset_q as usize),
+            )
+        });
+    }
+
+    /* Parses a hexagonal grid string into a board. */
     pub fn parse(input: &str) -> Result<Board, Box<dyn Error>> {
         let mut row_strings = input
             .split("\n")
@@ -84,6 +137,7 @@ impl Board {
         return Ok(Board(board));
     }
 
+    /* Writes a board into a hexagonal board string. */
     pub fn write(&self, colored: bool) -> String {
         let Board(board) = self;
 
@@ -138,49 +192,42 @@ impl Board {
         return output;
     }
 
+    /* Computes all possible next moves for a player. */
     pub fn possible_moves(&self, player: Player) -> Vec<Board> {
-        let Board(board) = self;
-
         let mut next_boards = Vec::<Board>::new();
 
-        /* r = row coordinate, q = column coordinate */
-        for (from_r, row) in board.iter().enumerate() {
-            for (from_q, &tile) in row.iter().enumerate() {
-                if let Tile::Stack(p, size) = tile {
-                    if p == player && size > 1 {
-                        /* Loop through all straight line directions. */
-                        for (dir_r, dir_q) in NEIGHBOR_OFFSETS {
-                            /* Move to a direction as far as there are empty tiles. */
-                            let mut r = from_r;
-                            let mut q = from_q;
-                            loop {
-                                /* Coordinates for the next tile in the direction.
-                                 * Hack: negative numbers cannot be added to a usize, so they are
-                                 * converted into usize with underflow and then added with overflow.
-                                 * Same as: let next_r = r + dir_r */
-                                let next_r = r.wrapping_add(dir_r as usize);
-                                let next_q = q.wrapping_add(dir_q as usize);
+        for (orig_coords, &tile) in self.iter_row_major() {
+            if let Tile::Stack(p, size) = tile {
+                if p == player && size > 1 {
+                    /* Loop through all straight line directions. */
+                    for dir_offset in NEIGHBOR_OFFSETS {
+                        /* Move to a direction as far as there are empty tiles. */
+                        let mut coords = orig_coords;
+                        loop {
+                            /* Coordinates for the next tile in the direction.
+                             * Hack: negative numbers cannot be added to a usize, so they are
+                             * converted into usize with underflow and then added with overflow.
+                             * Same as: let next_coords = coords + dir_offset */
+                            let next_coords = (
+                                coords.0.wrapping_add(dir_offset.0 as usize),
+                                coords.1.wrapping_add(dir_offset.1 as usize),
+                            );
 
-                                /* If next tile is empty, move to that tile. */
-                                if next_r < board.len()
-                                    && next_q < board[next_r].len()
-                                    && board[next_r][next_q] == Tile::Empty
-                                {
-                                    r = next_r;
-                                    q = next_q;
-                                } else {
-                                    break;
-                                }
+                            /* If next tile is empty, move to that tile. */
+                            if self[next_coords] == Tile::Empty {
+                                coords = next_coords;
+                            } else {
+                                break;
                             }
+                        }
 
-                            /* Check if we actually found any empty tiles in the direction. */
-                            if r != from_r || q != from_q {
-                                for split in 1..size {
-                                    let mut next_board = board.clone();
-                                    next_board[r][q] = Tile::Stack(player, split);
-                                    next_board[from_r][from_q] = Tile::Stack(player, size - split);
-                                    next_boards.push(Board(next_board));
-                                }
+                        /* Check if we actually found any empty tiles in the direction. */
+                        if coords != orig_coords {
+                            for split in 1..size {
+                                let mut next_board = self.clone();
+                                next_board[coords] = Tile::Stack(player, split);
+                                next_board[orig_coords] = Tile::Stack(player, size - split);
+                                next_boards.push(next_board);
                             }
                         }
                     }
@@ -195,35 +242,26 @@ impl Board {
      * Min has it. This is a very simple evaluation function that checks how blocked the stacks are
      * by their neighbors. */
     pub fn heuristic_evaluate(&self) -> i32 {
-        let Board(board) = self;
-
         let mut value = 0;
-        for (r, row) in board.iter().enumerate() {
-            for (q, &tile) in row.iter().enumerate() {
-                if let Tile::Stack(player, size) = tile {
-                    /* A maximum of 6 directions are blocked. */
-                    let mut blocked_directions = 6;
-                    for (offset_r, offset_q) in NEIGHBOR_OFFSETS {
-                        let neighbor_r = r.wrapping_add(offset_r as usize);
-                        let neighbor_q = q.wrapping_add(offset_q as usize);
-                        if neighbor_r < board.len()
-                            && neighbor_q < board[neighbor_r].len()
-                            && board[neighbor_r][neighbor_q] == Tile::Empty
-                        {
-                            blocked_directions -= 1;
-                        }
+        for (coords, &tile) in self.iter_row_major() {
+            if let Tile::Stack(player, size) = tile {
+                /* A maximum of 6 directions are blocked. */
+                let mut blocked_directions = 6;
+                for neighbor_coords in Board::iter_neighbor_coords(coords) {
+                    if self[neighbor_coords] == Tile::Empty {
+                        blocked_directions -= 1;
                     }
+                }
 
-                    /* Being surrounded from more sides and having more sheep in the stack increase
-                     * its blocked score. */
-                    let blocked_score = (size as i32 - 1) * blocked_directions;
+                /* Being surrounded from more sides and having more sheep in the stack increase
+                 * its blocked score. */
+                let blocked_score = (size as i32 - 1) * blocked_directions;
 
-                    /* A blocked Min stack gives an advantage to Max and therefore increases the
-                     * value of the board. Vice versa for Max. */
-                    match player {
-                        Player::Min => value += blocked_score,
-                        Player::Max => value -= blocked_score,
-                    }
+                /* A blocked Min stack gives an advantage to Max and therefore increases the
+                 * value of the board. Vice versa for Max. */
+                match player {
+                    Player::Min => value += blocked_score,
+                    Player::Max => value -= blocked_score,
                 }
             }
         }
@@ -234,7 +272,6 @@ impl Board {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
 
     #[test]
     fn output_equals_input() {
