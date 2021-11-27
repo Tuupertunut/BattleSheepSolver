@@ -15,8 +15,16 @@ fn main() {
     let mut board = Board::parse(&input_buffer).expect("Input is not a valid board");
     println!("{}", board.write(true));
 
+    /* Two AIs, Min and Max play the game, alternating turns. Min starts. */
     for &player in [Player::Min, Player::Max].iter().cycle() {
         let start_time = Instant::now();
+
+        /* Here we tell each player how to choose the next turn. This is basic minimax algorithm
+         * without optimizations.
+         *
+         * The min... and max... functions are implemented so that we need to give them a function
+         * that evaluates the boards. That's why the function calls are nested. At the depth of 4
+         * calls the heuristic evaluation function is used. */
         let (next_board, value, count) = match player {
             Player::Min => min_choose(&board, |board_1| {
                 max_value(board_1, |board_2| {
@@ -34,7 +42,16 @@ fn main() {
             }),
         };
         match next_board {
-            None => break,
+            None => {
+                if value > 0 {
+                    println!("\nMax won!");
+                } else if value < 0 {
+                    println!("\nMin won!")
+                } else {
+                    println!("\nDraw!")
+                }
+                break;
+            }
             Some(next_board) => {
                 println!(
                     "\ntook {:?}, evaluated {} boards, value {}\n{}",
