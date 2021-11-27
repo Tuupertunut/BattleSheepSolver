@@ -13,14 +13,13 @@ The user needs to select the game mode (AIvsAI or AIvsHuman) and give the progra
 The board is printed in the console after every AI turn until one player wins the game.
 
 ### Format of the hexagonal board
-![](hexsquare.png)
-A hexagonal grid can be represented as a square grid as shown in the image above. In the MVP version, the input and output boards are formatted in the console as a square grid of ascii characters, which denote players and stack sizes.
+The input and output boards are formatted in the console as a hexagonal looking grid of ascii characters, which denote players and stack sizes.
 
-In battle sheep, finding straight lines on the board is important. The straight lines of a hex grid can be found in the square grid on the horizontal (blue), vertical (green), and ascending diagonal (purple) axes, as shown in the image. Note that the descending diagonal axis does not represent a straight line in the hex grid. You can think of the square representation as a streched out hexagon.
+In battle sheep, finding straight lines on the board is important. On the ascii grid, straight lines can be found on the horizontal, descending diagonal, and ascending diagonal axes. The vertical axis does not represent a straight line.
 
 ## Optional features
 - Easier UI for playing the human's turn in AI vs human mode.
-- Graphical (and actually hexagonal) UI for displaying the board
+- Graphical UI for displaying the board
 - Support more than 2 players
 - AI for generating the board
 
@@ -37,7 +36,8 @@ An upper bound for the number of possible games is ![](numbergames.svg). These u
 Minimax algorithm with alpha-beta pruning is used for choosing the best move. The game tree is too large to be traversed completely, so a heuristic function will be used to evaluate game states at some depth in the tree. The heuristic algorithm has not yet been decided.
 
 ## Hexagonal grid
-The hex grid is stored in a 2-dimensional array in the same way it is represented in the UI as a square grid. Empty tiles are filled with the Rust equivalent of null. Straight lines can be traversed by increasing (or decreasing) the first, second or both indexes at the same time.
+![](hexsquare.png)
+The hex grid is stored in a 2-dimensional array as a square grid as shown in the image. Unused tiles are filled with the Rust equivalent of null. Straight lines can be traversed by increasing (or decreasing) the first, second or both indexes at the same time.
 
 ## Programming language
 Rust
