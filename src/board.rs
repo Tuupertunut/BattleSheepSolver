@@ -240,9 +240,14 @@ impl Board {
 
     /* Evaluates the current board state. Positive number means Max has an advantage, negative means
      * Min has it. This is a very simple evaluation function that checks how blocked the stacks are
-     * by their neighbors. */
+     * by their neighbors. In the endgame, another heuristic is used. */
     pub fn heuristic_evaluate(&self) -> i32 {
         let mut value = 0;
+        let mut max_all_blocked = true;
+        let mut min_all_blocked = true;
+        let mut max_stacks = 0;
+        let mut min_stacks = 0;
+
         for (coords, &tile) in self.iter_row_major() {
             if let Tile::Stack(player, size) = tile {
                 /* A maximum of 6 directions are blocked. */
@@ -253,6 +258,13 @@ impl Board {
                     }
                 }
 
+                if size > 1 && blocked_directions < 6 {
+                    match player {
+                        Player::Min => min_all_blocked = false,
+                        Player::Max => max_all_blocked = false,
+                    }
+                }
+
                 /* Being surrounded from more sides and having more sheep in the stack increase
                  * its blocked score. */
                 let blocked_score = (size as i32 - 1) * blocked_directions;
@@ -260,12 +272,108 @@ impl Board {
                 /* A blocked Min stack gives an advantage to Max and therefore increases the
                  * value of the board. Vice versa for Max. */
                 match player {
-                    Player::Min => value += blocked_score,
-                    Player::Max => value -= blocked_score,
+                    Player::Min => {
+                        value += blocked_score;
+                        min_stacks += 1;
+                    }
+                    Player::Max => {
+                        value -= blocked_score;
+                        max_stacks += 1;
+                    }
                 }
             }
         }
+
+        /* If at least on player is blocked, use end game evaluation instead.
+         *
+         * Both players are blocked, so the game is over and the winner can be determined. */
+        if min_all_blocked && max_all_blocked {
+            if max_stacks > min_stacks {
+                value = 1000000;
+            } else if min_stacks > max_stacks {
+                value = -1000000;
+            } else {
+                value = match self.largest_connected_field_holder() {
+                    Some(Player::Max) => 1000000,
+                    Some(Player::Min) => -1000000,
+                    None => 0,
+                }
+            }
+        /* Only one player is blocked. In most cases this means that the blocked player has lost. In
+         * the rare case that the beginning player has blocked themselves, there is a chance that
+         * they might still win. */
+        } else if min_all_blocked {
+            if max_stacks >= min_stacks {
+                value = 1000000;
+            } else {
+                /* The rare case where the blocked player might still win. However, if the other
+                 * player already has a larger connected field, the blocked player will lose. If
+                 * not, the game is not yet over and we fall back to the normal heuristic
+                 * evaluation. */
+                if let Some(Player::Max) = self.largest_connected_field_holder() {
+                    value = 1000000;
+                }
+            }
+        } else if max_all_blocked {
+            if min_stacks >= max_stacks {
+                value = -1000000;
+            } else {
+                if let Some(Player::Min) = self.largest_connected_field_holder() {
+                    value = -1000000;
+                }
+            }
+        }
+
         return value;
+    }
+
+    /* Tells which player has the largest connected field. */
+    pub fn largest_connected_field_holder(&self) -> Option<Player> {
+        let mut min_largest_field = 0;
+        let mut max_largest_field = 0;
+
+        let mut visited = HashSet::<(usize, usize)>::new();
+        let mut dfs_stack = Vec::<(usize, usize)>::new();
+        for (start_coords, &tile) in self.iter_row_major() {
+            if let Tile::Stack(player, _) = tile {
+                if !visited.contains(&start_coords) {
+                    let mut field_size = 0;
+
+                    /* Depth-first search for counting the size of a connected field. */
+                    visited.insert(start_coords);
+                    dfs_stack.push(start_coords);
+                    while let Some(coords) = dfs_stack.pop() {
+                        field_size += 1;
+
+                        for neighbor_coords in Board::iter_neighbor_coords(coords) {
+                            if let Tile::Stack(neighbor_player, _) = self[neighbor_coords] {
+                                if neighbor_player == player && !visited.contains(&neighbor_coords)
+                                {
+                                    visited.insert(neighbor_coords);
+                                    dfs_stack.push(neighbor_coords);
+                                }
+                            }
+                        }
+                    }
+
+                    match player {
+                        Player::Min => {
+                            min_largest_field = u32::max(min_largest_field, field_size);
+                        }
+                        Player::Max => {
+                            max_largest_field = u32::max(max_largest_field, field_size);
+                        }
+                    }
+                }
+            }
+        }
+        return if min_largest_field > max_largest_field {
+            Some(Player::Min)
+        } else if max_largest_field > min_largest_field {
+            Some(Player::Max)
+        } else {
+            None
+        };
     }
 }
 
