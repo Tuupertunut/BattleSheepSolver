@@ -13,6 +13,7 @@ AI for the Battle Sheep board game, using minimax and heuristics
 [Week 1](documentation/week1.md)
 [Week 2](documentation/week2.md)
 [Week 3](documentation/week3.md)
+[Week 4](documentation/week4.md)
 
 ## Test coverage
 
