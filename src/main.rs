@@ -54,7 +54,11 @@ fn main() {
             }
             Some(next_board) => {
                 println!(
-                    "\ntook {:?}, evaluated {} boards, value {}\n{}",
+                    "\n{}'s turn\ntook {:?}, evaluated {} boards, value {}\n{}",
+                    match player {
+                        Player::Min => "Min",
+                        Player::Max => "Max",
+                    },
                     start_time.elapsed(),
                     count,
                     value,
