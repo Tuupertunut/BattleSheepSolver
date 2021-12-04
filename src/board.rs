@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::error::Error;
+use std::iter;
 use std::ops::{Index, IndexMut};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
@@ -21,34 +22,21 @@ pub const NEIGHBOR_OFFSETS: [(isize, isize); 6] =
     [(0, 1), (1, 1), (1, 0), (0, -1), (-1, -1), (-1, 0)];
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
-pub struct Board(Vec<Vec<Tile>>);
-
-/* Helper function used by Board::parse and Board::write. */
-fn unindent(rows: Vec<String>) -> Vec<String> {
-    let indentation = rows
-        .iter()
-        .map(|row| row.chars().take_while(|&char| char == ' ').count())
-        .min()
-        .unwrap_or(0);
-    let even_indentation = indentation / 2 * 2;
-    let unindented = rows
-        .iter()
-        .map(|row| row[even_indentation..].to_string())
-        .collect::<Vec<String>>();
-    return unindented;
+pub struct Board {
+    /* Tiles stored in row-major order. */
+    tiles: Vec<Tile>,
+    row_length: usize,
 }
 
 impl Index<(usize, usize)> for Board {
     type Output = Tile;
 
     fn index(&self, (r, q): (usize, usize)) -> &Self::Output {
-        let Board(board) = self;
-
         /* r = row coordinate, q = column coordinate
          * Return the tile for all valid coords in the board, but also return NoTile for all coords
          * outside the board. This way the indexing operation never panics. */
-        if r < board.len() && q < board[r].len() {
-            return &board[r][q];
+        if r < self.num_rows() && q < self.row_length {
+            return &self.tiles[self.row_length * r + q];
         } else {
             return &Tile::NoTile;
         }
@@ -57,21 +45,26 @@ impl Index<(usize, usize)> for Board {
 
 impl IndexMut<(usize, usize)> for Board {
     fn index_mut(&mut self, (r, q): (usize, usize)) -> &mut Self::Output {
-        let Board(board) = self;
-
-        return &mut board[r][q];
+        return &mut self.tiles[self.row_length * r + q];
     }
 }
 
 impl Board {
+    pub fn num_rows(&self) -> usize {
+        return self.tiles.len() / self.row_length;
+    }
+
     /* Iterates through all tiles in row-major order. */
     pub fn iter_row_major(&self) -> impl Iterator<Item = ((usize, usize), &Tile)> {
-        let Board(board) = self;
-
-        return board
+        return self
+            .tiles
             .iter()
             .enumerate()
-            .flat_map(|(r, row)| row.iter().enumerate().map(move |(q, tile)| ((r, q), tile)));
+            .map(|(index, tile)| ((index / self.row_length, index % self.row_length), tile));
+    }
+
+    pub fn iter_rows(&self) -> impl Iterator<Item = (usize, &[Tile])> {
+        return self.tiles.chunks_exact(self.row_length).enumerate();
     }
 
     /* Iterates through all neighbors of the given coordinates. */
@@ -91,7 +84,7 @@ impl Board {
 
     /* Parses a hexagonal grid string into a board. */
     pub fn parse(input: &str) -> Result<Board, Box<dyn Error>> {
-        let mut row_strings = input
+        let row_strings = input
             .split("\n")
             /* Filter out whitespace-only rows. */
             .filter(|&row_string| !row_string.trim().is_empty())
@@ -100,47 +93,71 @@ impl Board {
              * to be indented by 0 spaces, the second by 2 spaces and so on. */
             .map(|(i, row_string)| {
                 let indentation = i * 2;
-                let row_indent = std::iter::repeat(' ').take(indentation).collect::<String>();
+                let row_indent = iter::repeat(' ').take(indentation).collect::<String>();
                 return row_indent + row_string.trim_end();
             })
             .collect::<Vec<String>>();
-        /* Remove unnecessary indentation. */
-        row_strings = unindent(row_strings);
 
-        let mut board = Vec::<Vec<Tile>>::new();
+        /* Column index of first board character in any row. */
+        let string_begin_index = row_strings
+            .iter()
+            .map(|row_string| row_string.chars().take_while(|&char| char == ' ').count())
+            .min()
+            .unwrap_or(0)
+            / 2
+            * 2;
+        /* Max number of tiles in any row. */
+        let row_length = (row_strings
+            .iter()
+            .map(|row_string| row_string.len())
+            .max()
+            .unwrap_or(0)
+            - string_begin_index
+            + 3)
+            / 4;
+        /* Column index of last board character in any row. */
+        let string_end_index = row_length * 4 + string_begin_index;
 
-        for row_string in row_strings {
-            let mut row = Vec::<Tile>::new();
+        let mut tiles = Vec::<Tile>::with_capacity(row_length * row_strings.len());
+
+        for row_string in row_strings.iter() {
+            /* The part of the row from begin index to end index, padded with spaces if needed. */
+            let row_content = row_string
+                .chars()
+                .chain(iter::repeat(' '))
+                .take(string_end_index)
+                .skip(string_begin_index)
+                .collect::<String>();
 
             /* Splitting row into 4 character pieces. */
-            for tile_string in row_string.as_bytes().chunks(4).map(String::from_utf8_lossy) {
+            for tile_string in row_content
+                .as_bytes()
+                .chunks(4)
+                .map(String::from_utf8_lossy)
+            {
                 let tile_content = tile_string.trim_end();
 
                 if tile_content == "" {
-                    row.push(Tile::NoTile);
+                    tiles.push(Tile::NoTile);
                 } else if tile_content == " 0" {
-                    row.push(Tile::Empty);
+                    tiles.push(Tile::Empty);
                 } else if tile_content.starts_with("+") {
                     let stack_size = tile_content[1..].parse::<u8>()?;
-                    row.push(Tile::Stack(Player::Max, stack_size));
+                    tiles.push(Tile::Stack(Player::Max, stack_size));
                 } else if tile_content.starts_with("-") {
                     let stack_size = tile_content[1..].parse::<u8>()?;
-                    row.push(Tile::Stack(Player::Min, stack_size));
+                    tiles.push(Tile::Stack(Player::Min, stack_size));
                 } else {
                     return Err("Invalid tile")?;
                 }
             }
-
-            board.push(row);
         }
 
-        return Ok(Board(board));
+        return Ok(Board { tiles, row_length });
     }
 
     /* Writes a board into a hexagonal board string. */
     pub fn write(&self, colored: bool) -> String {
-        let Board(board) = self;
-
         /* Ansi escape sequences for terminal colors. A colored text starts with a color sequence
          * and ends with a reset sequence. */
         const GREEN: &str = "\u{001b}[32m";
@@ -150,13 +167,13 @@ impl Board {
 
         let mut row_strings = Vec::<String>::new();
 
-        for (i, row) in board.iter().enumerate() {
+        for (r, row) in self.iter_rows() {
             let mut row_string = String::new();
 
             /* Indent each row so that the string looks like a hexagonal grid. The last row needs to
              * be indented by 0 spaces, the second last by 2 spaces and so on. */
-            let indentation = (board.len() - 1 - i) * 2;
-            let row_indent = std::iter::repeat(' ').take(indentation).collect::<String>();
+            let indentation = (self.num_rows() - 1 - r) * 2;
+            let row_indent = iter::repeat(' ').take(indentation).collect::<String>();
             row_string.push_str(&row_indent);
 
             for &tile in row {
@@ -185,8 +202,19 @@ impl Board {
             row_strings.push(row_string);
         }
 
-        /* Remove unnecessary indentation. */
-        row_strings = unindent(row_strings);
+        /* Column index of first board character in any row. */
+        let string_begin_index = row_strings
+            .iter()
+            .map(|row_string| row_string.chars().take_while(|&char| char == ' ').count())
+            .min()
+            .unwrap_or(0)
+            / 2
+            * 2;
+
+        /* Remove any unnecessary indentation and leading whitespace. */
+        for row_string in row_strings.iter_mut() {
+            *row_string = row_string[string_begin_index..].trim_end().to_string();
+        }
 
         let output = row_strings.join("\n");
         return output;
@@ -386,9 +414,9 @@ mod tests {
         /* Multiline strings are not indented correctly because the indentation would change the
          * string content. */
         let input = "
-   0  +2  
--2   0  -3  +3  
-   0           0  
+   0  +2
+-2   0  -3  +3
+   0           0
 "
         .trim_matches('\n');
         assert_eq!(input, Board::parse(input).unwrap().write(false));
@@ -402,34 +430,34 @@ mod tests {
     #[test]
     fn possible_moves_are_found() {
         let input = "
-   0  +2  
--2   0  -3  +3  
-   0           0  
+   0  +2
+-2   0  -3  +3
+   0           0
 "
         .trim_matches('\n');
         let max_moves = [
             "
-  +1  +1  
--2   0  -3  +3  
-   0           0  
+  +1  +1
+-2   0  -3  +3
+   0           0
 "
             .trim_matches('\n'),
             "
-   0  +1  
--2   0  -3  +3  
-  +1           0  
+   0  +1
+-2   0  -3  +3
+  +1           0
 "
             .trim_matches('\n'),
             "
-   0  +2  
--2   0  -3  +2  
-   0          +1  
+   0  +2
+-2   0  -3  +2
+   0          +1
 "
             .trim_matches('\n'),
             "
-   0  +2  
--2   0  -3  +1  
-   0          +2  
+   0  +2
+-2   0  -3  +1
+   0          +2
 "
             .trim_matches('\n'),
         ];
@@ -449,8 +477,8 @@ mod tests {
     #[test]
     fn win_evaluates_as_winners_advantage() {
         let max_wins = "
-  +14 +1   0   0  
--15 +1  -1   0  
+  +14 +1   0   0
+-15 +1  -1   0
 "
         .trim_matches('\n');
         assert!(Board::parse(max_wins).unwrap().heuristic_evaluate() > 0);
@@ -459,8 +487,8 @@ mod tests {
     #[test]
     fn end_with_equal_controlled_tiles_considers_field_size() {
         let max_has_greater_field = "
-  +15 -1   0   0  
--15 +1   0   0  
+  +15 -1   0   0
+-15 +1   0   0
 "
         .trim_matches('\n');
         assert!(
@@ -474,8 +502,8 @@ mod tests {
     #[test]
     fn draw_evaluates_as_zero() {
         let draw = "
-  +1   0  -1  +14  
--14 +1   0  -1  
+  +1   0  -1  +14
+-14 +1   0  -1
 "
         .trim_matches('\n');
         assert!(Board::parse(draw).unwrap().heuristic_evaluate() == 0);
@@ -484,9 +512,9 @@ mod tests {
     #[test]
     fn in_end_tile_count_weighs_more_than_field_size() {
         let min_wins = "
-             0   0  
-  +8  -1   0  -1  
--14 +8  
+             0   0
+  +8  -1   0  -1
+-14 +8
 "
         .trim_matches('\n');
         assert!(Board::parse(min_wins).unwrap().heuristic_evaluate() < 0);
@@ -495,19 +523,19 @@ mod tests {
     #[test]
     fn win_evaluates_higher_than_continuing_game() {
         let min_wins = "
-     0  
-   0   0   0  
-     0   0  
-  -15 
-+16 -1   0   0   0   0   0   0   0   0  
+     0
+   0   0   0
+     0   0
+  -15
++16 -1   0   0   0   0   0   0   0   0
 "
         .trim_matches('\n');
         let min_will_lose = "
-     0  
-   0  -15  0  
-     0   0  
-  -1  
-+16  0   0   0   0   0   0   0   0   0  
+     0
+   0  -15  0
+     0   0
+  -1
++16  0   0   0   0   0   0   0   0   0
 "
         .trim_matches('\n');
         assert!(
