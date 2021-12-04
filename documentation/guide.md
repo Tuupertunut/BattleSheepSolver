@@ -8,7 +8,7 @@ The program is written in Rust. To run it, you need Cargo, the Rust build tool. 
 
 ## How to run
 
-To run the program, run `cargo run --release` in the project folder. Note: It is important to use the `--release` flag which makes the program run about 100x faster. With the flag a turn will take only a few seconds on a modern computer, but without it it will take minutes.
+To run the program, run `cargo run --release` in the project folder. Note: It is important to use the `--release` flag which makes the program run about 100x faster.
 
 ## How to use
 
