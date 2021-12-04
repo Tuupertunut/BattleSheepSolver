@@ -25,20 +25,30 @@ fn main() {
          * The min... and max... functions are implemented so that we need to give them a function
          * that evaluates the boards. That's why the function calls are nested. At the depth of 4
          * calls the heuristic evaluation function is used. */
-        let (next_board, value, count) = match player {
+        let (next_board, value, visited) = match player {
             Player::Min => min_choose(&board, |board_1| {
-                max_value(board_1, |board_2| {
-                    min_value(board_2, |board_3| {
-                        max_value(board_3, |board_4| (board_4.heuristic_evaluate(), 1))
-                    })
-                })
+                let (_, value_1, visited_1) = max_choose(board_1, |board_2| {
+                    let (_, value_2, visited_2) = min_choose(board_2, |board_3| {
+                        let (_, value_3, visited_3) = max_choose(board_3, |board_4| {
+                            return (board_4.heuristic_evaluate(), 1);
+                        });
+                        return (value_3, visited_3);
+                    });
+                    return (value_2, visited_2);
+                });
+                return (value_1, visited_1);
             }),
             Player::Max => max_choose(&board, |board_1| {
-                min_value(board_1, |board_2| {
-                    max_value(board_2, |board_3| {
-                        min_value(board_3, |board_4| (board_4.heuristic_evaluate(), 1))
-                    })
-                })
+                let (_, value_1, visited_1) = min_choose(board_1, |board_2| {
+                    let (_, value_2, visited_2) = max_choose(board_2, |board_3| {
+                        let (_, value_3, visited_3) = min_choose(board_3, |board_4| {
+                            return (board_4.heuristic_evaluate(), 1);
+                        });
+                        return (value_3, visited_3);
+                    });
+                    return (value_2, visited_2);
+                });
+                return (value_1, visited_1);
             }),
         };
         match next_board {
@@ -60,7 +70,7 @@ fn main() {
                         Player::Max => "Max",
                     },
                     start_time.elapsed(),
-                    count,
+                    visited,
                     value,
                     next_board.write(true)
                 );
@@ -70,82 +80,52 @@ fn main() {
     }
 }
 
-fn min_value<F>(board: &Board, max_value_function: F) -> (i32, u64)
+fn min_choose<F>(board: &Board, evaluate_next: F) -> (Option<Board>, i32, u64)
 where
     F: Fn(&Board) -> (i32, u64),
 {
-    let mut value = i32::MAX;
-    let mut count = 0;
-    for next_board in board.possible_moves(Player::Min) {
-        let (next_board_value, next_board_count) = max_value_function(&next_board);
-        value = i32::min(value, next_board_value);
-        count += next_board_count;
-    }
-    if value == i32::MAX {
-        value = board.heuristic_evaluate();
-        count += 1;
-    }
-    return (value, count);
-}
-
-fn max_value<F>(board: &Board, min_value_function: F) -> (i32, u64)
-where
-    F: Fn(&Board) -> (i32, u64),
-{
-    let mut value = i32::MIN;
-    let mut count = 0;
-    for next_board in board.possible_moves(Player::Max) {
-        let (next_board_value, next_board_count) = min_value_function(&next_board);
-        value = i32::max(value, next_board_value);
-        count += next_board_count;
-    }
-    if value == i32::MIN {
-        value = board.heuristic_evaluate();
-        count += 1;
-    }
-    return (value, count);
-}
-
-fn min_choose<F>(board: &Board, max_value_function: F) -> (Option<Board>, i32, u64)
-where
-    F: Fn(&Board) -> (i32, u64),
-{
-    let mut value = i32::MAX;
     let mut chosen_move = None;
-    let mut count = 0;
+    let mut min_value = i32::MAX;
+    let mut total_visited = 0;
+
     for next_board in board.possible_moves(Player::Min) {
-        let (next_board_value, next_board_count) = max_value_function(&next_board);
-        if next_board_value < value {
-            value = next_board_value;
+        let (value, visited) = evaluate_next(&next_board);
+        if value < min_value {
+            min_value = value;
             chosen_move = Some(next_board);
         }
-        count += next_board_count;
+        total_visited += visited;
     }
-    if value == i32::MAX {
-        value = board.heuristic_evaluate();
-        count += 1;
+
+    if chosen_move == None {
+        min_value = board.heuristic_evaluate();
+        total_visited = 1;
     }
-    return (chosen_move, value, count);
+
+    return (chosen_move, min_value, total_visited);
 }
 
-fn max_choose<F>(board: &Board, min_value_function: F) -> (Option<Board>, i32, u64)
+fn max_choose<F>(board: &Board, evaluate_next: F) -> (Option<Board>, i32, u64)
 where
     F: Fn(&Board) -> (i32, u64),
 {
-    let mut value = i32::MIN;
     let mut chosen_move = None;
-    let mut count = 0;
+    let mut max_value = i32::MIN;
+    let mut total_visited = 0;
+
     for next_board in board.possible_moves(Player::Max) {
-        let (next_board_value, next_board_count) = min_value_function(&next_board);
-        if next_board_value > value {
-            value = next_board_value;
+        let (value, visited) = evaluate_next(&next_board);
+        if value > max_value {
+            max_value = value;
             chosen_move = Some(next_board);
         }
-        count += next_board_count;
+        total_visited += visited;
     }
-    if value == i32::MIN {
-        value = board.heuristic_evaluate();
-        count += 1;
+
+    if chosen_move == None {
+        max_value = board.heuristic_evaluate();
+        total_visited = 1;
     }
-    return (chosen_move, value, count);
+
+    return (chosen_move, max_value, total_visited);
 }
