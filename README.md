@@ -1,7 +1,3 @@
-## Note for the reviewer!
-
-Please review commit b1ab554 instead of the latest commit at midnight. Github was down at the time of the deadline.
-
 # Battle Sheep solver
 
 AI for the Battle Sheep board game, using minimax and heuristics
@@ -18,6 +14,7 @@ AI for the Battle Sheep board game, using minimax and heuristics
 [Week 2](documentation/week2.md)
 [Week 3](documentation/week3.md)
 [Week 4](documentation/week4.md)
+[Week 5](documentation/week5.md)
 
 ## Test coverage
 
