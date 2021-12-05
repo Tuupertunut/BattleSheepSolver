@@ -55,12 +55,12 @@ impl Board {
     }
 
     /* Iterates through all tiles in row-major order. */
-    pub fn iter_row_major(&self) -> impl Iterator<Item = ((usize, usize), &Tile)> {
+    pub fn iter_row_major(&self) -> impl Iterator<Item = ((usize, usize), Tile)> + '_ {
         return self
             .tiles
             .iter()
             .enumerate()
-            .map(|(index, tile)| ((index / self.row_length, index % self.row_length), tile));
+            .map(|(index, &tile)| ((index / self.row_length, index % self.row_length), tile));
     }
 
     pub fn iter_rows(&self) -> impl Iterator<Item = (usize, &[Tile])> {
@@ -220,16 +220,27 @@ impl Board {
         return output;
     }
 
-    /* Computes all possible next moves for a player. */
-    pub fn possible_moves(&self, player: Player) -> Vec<Board> {
-        let mut next_boards = Vec::<Board>::new();
+    /* Iterates through all possible next moves for a player. */
+    pub fn possible_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
+        /* Iterate through all tiles. */
+        return self
+            .iter_row_major()
+            /* Check if the tile is a splittable stack of this player. */
+            .filter(
+                move |&(_, tile)| matches!(tile, Tile::Stack(p, size) if p == player && size > 1),
+            )
+            .flat_map(move |(orig_coords, tile)| {
+                /* We already know from the above check that tile must be a stack. */
+                let size = match tile {
+                    Tile::Stack(_, size) => size,
+                    _ => unreachable!(),
+                };
 
-        for (orig_coords, &tile) in self.iter_row_major() {
-            if let Tile::Stack(p, size) = tile {
-                if p == player && size > 1 {
-                    /* Loop through all straight line directions. */
-                    for dir_offset in NEIGHBOR_OFFSETS {
-                        /* Move to a direction as far as there are empty tiles. */
+                /* Iterate through all straight line directions. */
+                return NEIGHBOR_OFFSETS
+                    .iter()
+                    /* Move to a direction as far as there are empty tiles. */
+                    .map(move |&dir_offset| {
                         let mut coords = orig_coords;
                         loop {
                             /* Coordinates for the next tile in the direction.
@@ -248,22 +259,21 @@ impl Board {
                                 break;
                             }
                         }
-
-                        /* Check if we actually found any empty tiles in the direction. */
-                        if coords != orig_coords {
-                            for split in 1..size {
-                                let mut next_board = self.clone();
-                                next_board[coords] = Tile::Stack(player, split);
-                                next_board[orig_coords] = Tile::Stack(player, size - split);
-                                next_boards.push(next_board);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return next_boards;
+                        return coords;
+                    })
+                    /* Check if we actually found any empty tiles in the direction. */
+                    .filter(move |&coords| coords != orig_coords)
+                    .flat_map(move |coords| {
+                        /* Iterate through all the ways to split the stack. */
+                        return (1..size).map(move |split| {
+                            /* Create the next board. */
+                            let mut next_board = self.clone();
+                            next_board[coords] = Tile::Stack(player, split);
+                            next_board[orig_coords] = Tile::Stack(player, size - split);
+                            return next_board;
+                        });
+                    });
+            });
     }
 
     /* Evaluates the current board state. Positive number means Max has an advantage, negative means
@@ -276,7 +286,7 @@ impl Board {
         let mut max_stacks = 0;
         let mut min_stacks = 0;
 
-        for (coords, &tile) in self.iter_row_major() {
+        for (coords, tile) in self.iter_row_major() {
             if let Tile::Stack(player, size) = tile {
                 /* A maximum of 6 directions are blocked. */
                 let mut blocked_directions = 6;
@@ -362,7 +372,7 @@ impl Board {
 
         let mut visited = HashSet::<(usize, usize)>::new();
         let mut dfs_stack = Vec::<(usize, usize)>::new();
-        for (start_coords, &tile) in self.iter_row_major() {
+        for (start_coords, tile) in self.iter_row_major() {
             if let Tile::Stack(player, _) = tile {
                 if !visited.contains(&start_coords) {
                     let mut field_size = 0;
@@ -465,7 +475,6 @@ mod tests {
             Board::parse(input)
                 .unwrap()
                 .possible_moves(Player::Max)
-                .into_iter()
                 .collect::<HashSet<Board>>(),
             max_moves
                 .iter()
