@@ -1,8 +1,10 @@
 mod board;
 
-use std::time::Instant;
+#[cfg(test)]
+mod tests;
 
 use board::*;
+use std::time::Instant;
 
 fn main() {
     println!("Enter a board");
