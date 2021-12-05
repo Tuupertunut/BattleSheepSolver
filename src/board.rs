@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::error::Error;
 use std::iter;
 use std::ops::{Index, IndexMut};
@@ -370,24 +369,30 @@ impl Board {
         let mut min_largest_field = 0;
         let mut max_largest_field = 0;
 
-        let mut visited = HashSet::<(usize, usize)>::new();
+        /* Helper functions for using the visited array. */
+        let is_visited = |visited: &Vec<bool>, (r, q)| visited[self.row_length * r + q];
+        let set_visited = |visited: &mut Vec<bool>, (r, q)| visited[self.row_length * r + q] = true;
+
+        let mut visited = vec![false; self.tiles.len()];
         let mut dfs_stack = Vec::<(usize, usize)>::new();
+
         for (start_coords, tile) in self.iter_row_major() {
             if let Tile::Stack(player, _) = tile {
-                if !visited.contains(&start_coords) {
+                if !is_visited(&visited, start_coords) {
                     let mut field_size = 0;
 
                     /* Depth-first search for counting the size of a connected field. */
-                    visited.insert(start_coords);
+                    set_visited(&mut visited, start_coords);
                     dfs_stack.push(start_coords);
                     while let Some(coords) = dfs_stack.pop() {
                         field_size += 1;
 
                         for neighbor_coords in Board::iter_neighbor_coords(coords) {
                             if let Tile::Stack(neighbor_player, _) = self[neighbor_coords] {
-                                if neighbor_player == player && !visited.contains(&neighbor_coords)
+                                if neighbor_player == player
+                                    && !is_visited(&visited, neighbor_coords)
                                 {
-                                    visited.insert(neighbor_coords);
+                                    set_visited(&mut visited, neighbor_coords);
                                     dfs_stack.push(neighbor_coords);
                                 }
                             }
@@ -418,6 +423,7 @@ impl Board {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn output_equals_input() {
