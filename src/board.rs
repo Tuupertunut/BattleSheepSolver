@@ -67,17 +67,19 @@ impl Board {
     }
 
     /* Iterates through all neighbors of the given coordinates. */
-    pub fn iter_neighbor_coords((r, q): (usize, usize)) -> impl Iterator<Item = (usize, usize)> {
-        return NEIGHBOR_OFFSETS.iter().map(move |&(offset_r, offset_q)| {
+    pub fn iter_neighbors(
+        &self,
+        coords: (usize, usize),
+    ) -> impl Iterator<Item = ((usize, usize), Tile)> + '_ {
+        return NEIGHBOR_OFFSETS.iter().map(move |&offset| {
             /* Hack: negative numbers cannot be added to a usize, so they are converted into usize
              * with underflow and then added with overflow.
-             * Same as:
-             * r + offset_r
-             * q + offset_q */
-            (
-                r.wrapping_add(offset_r as usize),
-                q.wrapping_add(offset_q as usize),
-            )
+             * Same as: let neighbor_coords = coords + offset */
+            let neighbor_coords = (
+                coords.0.wrapping_add(offset.0 as usize),
+                coords.1.wrapping_add(offset.1 as usize),
+            );
+            return (neighbor_coords, self[neighbor_coords]);
         });
     }
 
@@ -289,8 +291,8 @@ impl Board {
             if let Tile::Stack(player, size) = tile {
                 /* A maximum of 6 directions are blocked. */
                 let mut blocked_directions = 6;
-                for neighbor_coords in Board::iter_neighbor_coords(coords) {
-                    if self[neighbor_coords] == Tile::Empty {
+                for (_, neighbor) in self.iter_neighbors(coords) {
+                    if neighbor == Tile::Empty {
                         blocked_directions -= 1;
                     }
                 }
@@ -387,8 +389,8 @@ impl Board {
                     while let Some(coords) = dfs_stack.pop() {
                         field_size += 1;
 
-                        for neighbor_coords in Board::iter_neighbor_coords(coords) {
-                            if let Tile::Stack(neighbor_player, _) = self[neighbor_coords] {
+                        for (neighbor_coords, neighbor) in self.iter_neighbors(coords) {
+                            if let Tile::Stack(neighbor_player, _) = neighbor {
                                 if neighbor_player == player
                                     && !is_visited(&visited, neighbor_coords)
                                 {
