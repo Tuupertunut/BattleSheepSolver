@@ -73,8 +73,17 @@ fn min_choose(
     } else {
         let mut beta = beta;
 
+        /* Sort moves by heuristic value. Moves with a better heuristic value are more likely to be
+         * selected. If they are processed first, alpha-beta pruning will kick in sooner.
+         * Exception: Moves generated on depth 1 will be evaluated by the heuristic anyway, so there
+         * is no point in reordering them. */
+        let mut moves = board.possible_moves(Player::Min).collect::<Vec<Board>>();
+        if heuristic_depth > 1 {
+            moves.sort_by_cached_key(|next_board| next_board.heuristic_evaluate());
+        }
+
         /* Choose the minimum value move. */
-        for next_board in board.possible_moves(Player::Min) {
+        for next_board in moves {
             let (_, value, visited) = max_choose(&next_board, heuristic_depth - 1, alpha, beta);
 
             total_visited += visited;
@@ -117,7 +126,12 @@ fn max_choose(
     } else {
         let mut alpha = alpha;
 
-        for next_board in board.possible_moves(Player::Max) {
+        let mut moves = board.possible_moves(Player::Max).collect::<Vec<Board>>();
+        if heuristic_depth > 1 {
+            moves.sort_by_cached_key(|next_board| -next_board.heuristic_evaluate());
+        }
+
+        for next_board in moves {
             let (_, value, visited) = min_choose(&next_board, heuristic_depth - 1, alpha, beta);
 
             total_visited += visited;
