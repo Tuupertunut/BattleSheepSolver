@@ -23,8 +23,8 @@ fn main() {
 
         /* Here we tell each player how to choose the next turn. */
         let (next_board, value, visited) = match player {
-            Player::Min => min_choose(&board, 5, i32::MIN, i32::MAX),
-            Player::Max => max_choose(&board, 5, i32::MIN, i32::MAX),
+            Player::Min => min_choose(&board, 6, i32::MIN, i32::MAX),
+            Player::Max => max_choose(&board, 6, i32::MIN, i32::MAX),
         };
         match next_board {
             None => {
