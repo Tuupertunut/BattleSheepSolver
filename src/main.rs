@@ -62,54 +62,74 @@ fn min_choose(
     alpha: i32,
     beta: i32,
 ) -> (Option<Board>, i32, u64) {
-    let mut chosen_move = None;
-    let mut min_value = i32::MAX;
-    let mut total_visited = 0;
-
     /* At depth 0 use heuristic evaluation. */
     if heuristic_depth == 0 {
-        min_value = board.heuristic_evaluate();
-        total_visited = 1;
+        let chosen_move = None;
+        let min_value = board.heuristic_evaluate();
+        let total_visited = 1;
+        return (chosen_move, min_value, total_visited);
     } else {
-        let mut beta = beta;
+        /* Inner function for choosing the minimum value move from an iterator. An inner function is
+         * needed so that it can take any type of iterator as a parameter. */
+        fn min_choose_move<I: Iterator<Item = Board>>(
+            moves: I,
+            heuristic_depth: u32,
+            alpha: i32,
+            beta: i32,
+        ) -> (Option<Board>, i32, u64) {
+            let mut chosen_move = None;
+            let mut min_value = i32::MAX;
+            let mut total_visited = 0;
+
+            let mut beta = beta;
+
+            /* Choose the minimum value move. */
+            for next_board in moves {
+                let (_, value, visited) = max_choose(&next_board, heuristic_depth - 1, alpha, beta);
+
+                total_visited += visited;
+                if value < min_value {
+                    min_value = value;
+                    chosen_move = Some(next_board);
+
+                    /* Alpha-beta pruning: If the value goes lower than alpha, there is no chance that
+                     * max would ever choose this branch, so we can return early. */
+                    if min_value <= alpha {
+                        return (chosen_move, min_value, total_visited);
+                    }
+                    beta = i32::min(beta, min_value);
+                }
+            }
+
+            return (chosen_move, min_value, total_visited);
+        }
 
         /* Sort moves by heuristic value. Moves with a better heuristic value are more likely to be
          * selected. If they are processed first, alpha-beta pruning will kick in sooner.
          * Exception: Moves generated on depth 1 will be evaluated by the heuristic anyway, so there
          * is no point in reordering them. */
-        let mut iter: Box<dyn Iterator<Item = Board>> = Box::new(board.possible_moves(Player::Min));
+        let result;
         if heuristic_depth > 1 {
-            let mut moves = iter.collect::<Vec<Board>>();
+            let mut moves = board.possible_moves(Player::Min).collect::<Vec<Board>>();
             moves.sort_by_cached_key(|next_board| next_board.heuristic_evaluate());
-            iter = Box::new(moves.into_iter());
-        }
 
-        /* Choose the minimum value move. */
-        for next_board in iter {
-            let (_, value, visited) = max_choose(&next_board, heuristic_depth - 1, alpha, beta);
-
-            total_visited += visited;
-            if value < min_value {
-                min_value = value;
-                chosen_move = Some(next_board);
-
-                /* Alpha-beta pruning: If the value goes lower than alpha, there is no chance that
-                 * max would ever choose this branch, so we can return early. */
-                if min_value <= alpha {
-                    return (chosen_move, min_value, total_visited);
-                }
-                beta = i32::min(beta, min_value);
-            }
-        }
+            let iter = moves.into_iter();
+            result = min_choose_move(iter, heuristic_depth, alpha, beta);
+        } else {
+            let iter = board.possible_moves(Player::Min);
+            result = min_choose_move(iter, heuristic_depth, alpha, beta);
+        };
+        let (chosen_move, min_value, total_visited) = result;
 
         /* If there were no possible moves, fall back to heuristic evaluation. */
         if chosen_move == None {
-            min_value = board.heuristic_evaluate();
-            total_visited = 1;
+            let min_value = board.heuristic_evaluate();
+            let total_visited = 1;
+            return (chosen_move, min_value, total_visited);
+        } else {
+            return (chosen_move, min_value, total_visited);
         }
     }
-
-    return (chosen_move, min_value, total_visited);
 }
 
 fn max_choose(
@@ -118,43 +138,61 @@ fn max_choose(
     alpha: i32,
     beta: i32,
 ) -> (Option<Board>, i32, u64) {
-    let mut chosen_move = None;
-    let mut max_value = i32::MIN;
-    let mut total_visited = 0;
-
     if heuristic_depth == 0 {
-        max_value = board.heuristic_evaluate();
-        total_visited = 1;
+        let chosen_move = None;
+        let max_value = board.heuristic_evaluate();
+        let total_visited = 1;
+        return (chosen_move, max_value, total_visited);
     } else {
-        let mut alpha = alpha;
+        fn max_choose_move<I: Iterator<Item = Board>>(
+            moves: I,
+            heuristic_depth: u32,
+            alpha: i32,
+            beta: i32,
+        ) -> (Option<Board>, i32, u64) {
+            let mut chosen_move = None;
+            let mut max_value = i32::MIN;
+            let mut total_visited = 0;
 
-        let mut iter: Box<dyn Iterator<Item = Board>> = Box::new(board.possible_moves(Player::Max));
-        if heuristic_depth > 1 {
-            let mut moves = iter.collect::<Vec<Board>>();
-            moves.sort_by_cached_key(|next_board| -next_board.heuristic_evaluate());
-            iter = Box::new(moves.into_iter());
-        }
+            let mut alpha = alpha;
 
-        for next_board in iter {
-            let (_, value, visited) = min_choose(&next_board, heuristic_depth - 1, alpha, beta);
+            for next_board in moves {
+                let (_, value, visited) = min_choose(&next_board, heuristic_depth - 1, alpha, beta);
 
-            total_visited += visited;
-            if value > max_value {
-                max_value = value;
-                chosen_move = Some(next_board);
+                total_visited += visited;
+                if value > max_value {
+                    max_value = value;
+                    chosen_move = Some(next_board);
 
-                if max_value >= beta {
-                    return (chosen_move, max_value, total_visited);
+                    if max_value >= beta {
+                        return (chosen_move, max_value, total_visited);
+                    }
+                    alpha = i32::max(alpha, max_value);
                 }
-                alpha = i32::max(alpha, max_value);
             }
+
+            return (chosen_move, max_value, total_visited);
         }
+
+        let result;
+        if heuristic_depth > 1 {
+            let mut moves = board.possible_moves(Player::Max).collect::<Vec<Board>>();
+            moves.sort_by_cached_key(|next_board| -next_board.heuristic_evaluate());
+
+            let iter = moves.into_iter();
+            result = max_choose_move(iter, heuristic_depth, alpha, beta);
+        } else {
+            let iter = board.possible_moves(Player::Max);
+            result = max_choose_move(iter, heuristic_depth, alpha, beta);
+        }
+        let (chosen_move, max_value, total_visited) = result;
 
         if chosen_move == None {
-            max_value = board.heuristic_evaluate();
-            total_visited = 1;
+            let max_value = board.heuristic_evaluate();
+            let total_visited = 1;
+            return (chosen_move, max_value, total_visited);
+        } else {
+            return (chosen_move, max_value, total_visited);
         }
     }
-
-    return (chosen_move, max_value, total_visited);
 }
