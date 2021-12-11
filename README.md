@@ -8,6 +8,10 @@ AI for the Battle Sheep board game, using minimax and heuristics
 
 [Project specification](documentation/specification.md)
 
+[Testing report](documentation/testreport.md)
+
+[Implementation report](documentation/implreport.md)
+
 ## Weekly reports
 
 [Week 1](documentation/week1.md)
