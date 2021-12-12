@@ -8,6 +8,15 @@ pub enum Player {
     Max,
 }
 
+impl Player {
+    pub fn sign(self) -> i32 {
+        match self {
+            Self::Min => -1,
+            Self::Max => 1,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum Tile {
     NoTile, /* outside of the board */
