@@ -134,3 +134,34 @@ fn win_evaluates_higher_than_continuing_game() {
             < Board::parse(min_will_lose).unwrap().heuristic_evaluate()
     );
 }
+
+#[test]
+fn even_split_evaluates_higher_than_uneven() {
+    let max_has_even_split = "
+  -4   0   0  +8
+-12  0   0  +8
+"
+    .trim_matches('\n');
+    assert!(
+        Board::parse(max_has_even_split)
+            .unwrap()
+            .heuristic_evaluate()
+            > 0
+    );
+}
+
+#[test]
+fn less_blocked_evaluates_higher_than_blocked() {
+    let max_is_less_blocked = "
+     0      -8  -8
+   0  +8   0   0
+ 0  +8       0
+"
+    .trim_matches('\n');
+    assert!(
+        Board::parse(max_is_less_blocked)
+            .unwrap()
+            .heuristic_evaluate()
+            > 0
+    );
+}

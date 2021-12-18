@@ -288,13 +288,18 @@ impl Board {
 
     /* Evaluates the current board state. Positive number means Max has an advantage, negative means
      * Min has it. This is a very simple evaluation function that checks how blocked the stacks are
-     * by their neighbors. In the endgame, another heuristic is used. */
+     * by their neighbors and how evenly split they are. In the endgame, another heuristic is used. */
     pub fn heuristic_evaluate(&self) -> i32 {
         let mut value = 0;
         let mut max_all_blocked = true;
         let mut min_all_blocked = true;
         let mut max_stacks = 0;
         let mut min_stacks = 0;
+
+        let mut max_largest_stack = 0;
+        let mut max_smallest_stack = i32::MAX;
+        let mut min_largest_stack = 0;
+        let mut min_smallest_stack = i32::MAX;
 
         for (coords, tile) in self.iter_row_major() {
             if let Tile::Stack(player, size) = tile {
@@ -317,20 +322,29 @@ impl Board {
                  * its blocked score. */
                 let blocked_score = (size as i32 - 1) * blocked_directions;
 
-                /* A blocked Min stack gives an advantage to Max and therefore increases the
-                 * value of the board. Vice versa for Max. */
                 match player {
                     Player::Min => {
+                        /* A blocked Min stack gives an advantage to Max and therefore increases the
+                         * value of the board. Vice versa for Max. */
                         value += blocked_score;
                         min_stacks += 1;
+                        min_largest_stack = i32::max(min_largest_stack, size as i32);
+                        min_smallest_stack = i32::min(min_smallest_stack, size as i32);
                     }
                     Player::Max => {
                         value -= blocked_score;
                         max_stacks += 1;
+                        max_largest_stack = i32::max(max_largest_stack, size as i32);
+                        max_smallest_stack = i32::min(max_smallest_stack, size as i32);
                     }
                 }
             }
         }
+
+        /* Extra score for splitting stacks evenly. This does not matter as much as being blocked,
+         * the maximum splitting bonus is 7. */
+        value += (min_largest_stack - min_smallest_stack) / 2;
+        value -= (max_largest_stack - max_smallest_stack) / 2;
 
         /* If at least on player is blocked, use end game evaluation instead.
          *
