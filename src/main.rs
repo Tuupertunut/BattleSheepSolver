@@ -4,7 +4,7 @@ mod board;
 mod tests;
 
 use board::*;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 fn main() {
     println!("Enter a board");
@@ -16,6 +16,9 @@ fn main() {
     }
     let mut board = Board::parse(&input_buffer).expect("Input is not a valid board");
     println!("{}", board.write(true));
+
+    let mut turns = 0;
+    let mut total_duration = Duration::ZERO;
 
     /* Two AIs, Min and Max play the game, alternating turns. Min starts. */
     for &player in [Player::Min, Player::Max].iter().cycle() {
@@ -34,20 +37,24 @@ fn main() {
                 } else {
                     println!("\nDraw!")
                 }
+                println!("(average turn took {:?})", total_duration / turns);
                 break;
             }
             Some(next_board) => {
+                let duration = start_time.elapsed();
                 println!(
                     "\n{}'s turn\ntook {:?}, evaluated {} boards, value {}\n{}",
                     match player {
                         Player::Min => "Min",
                         Player::Max => "Max",
                     },
-                    start_time.elapsed(),
+                    duration,
                     visited,
                     value,
                     next_board.write(true)
                 );
+                total_duration += duration;
+                turns += 1;
                 board = next_board;
             }
         }
