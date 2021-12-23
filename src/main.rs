@@ -7,58 +7,109 @@ use board::*;
 use std::time::{Duration, Instant};
 
 fn main() {
-    println!("Enter a board");
+    /* Game mode is given as a command line argument. */
+    let args = std::env::args().collect::<Vec<String>>();
+    if args.len() < 2 || (args[1] != "-p" && args[1] != "-w") {
+        panic!(
+            "
+            Usage: {} {{-p|-w}}
+            -p: play against the AI
+            -w: watch two AIs play against one another
+            ",
+            args[0]
+        );
+    }
+    let human_max = match args[1].as_str() {
+        "-p" => true,
+        "-w" => false,
+        _ => unreachable!(),
+    };
+
+    println!("Enter a starting board (finish with an empty line)");
+    let mut board = read_board_from_user();
+    println!("{}", board.write(true));
+
+    /* Min always starts. */
+    let mut player = Player::Min;
+
+    let mut turns = 0;
+    let mut total_duration = Duration::ZERO;
+
+    /* The game loop. One iteration means one turn. */
+    loop {
+        let start_time = Instant::now();
+
+        /* The player chooses a move. */
+        let (next_board, val, visited) = choose_move(player, &board, 6, i32::MIN + 1, i32::MAX);
+        let value = player.sign() * val;
+
+        match next_board {
+            None => {
+                /* The player could not choose a move, so the game is over. */
+                println!();
+                if value > 0 {
+                    println!("Max won!");
+                } else if value < 0 {
+                    println!("Min won!")
+                } else {
+                    println!("Draw!")
+                }
+                println!("(average turn took {:?})", total_duration / turns);
+
+                break;
+            }
+            Some(next_board) => {
+                let duration = start_time.elapsed();
+
+                println!();
+                println!(
+                    "{}'s turn",
+                    match player {
+                        Player::Min => "Min",
+                        Player::Max => "Max",
+                    }
+                );
+                println!(
+                    "took {:?}, evaluated {} boards, value {}",
+                    duration, visited, value
+                );
+                println!("{}", next_board.write(true));
+
+                total_duration += duration;
+                turns += 1;
+
+                /* Setting up the next turn. */
+                if human_max {
+                    /* Max is a human player (the user). Their whole turn is played just by asking
+                     * them for a board. After that it's Min's turn again. */
+                    println!();
+                    println!("Max's turn");
+                    println!("Enter a board (finish with an empty line)");
+                    board = read_board_from_user();
+                    println!("{}", board.write(true));
+
+                    player = Player::Min;
+                } else {
+                    /* The next turn is played by the opposite player. */
+                    board = next_board;
+                    player = match player {
+                        Player::Min => Player::Max,
+                        Player::Max => Player::Min,
+                    };
+                }
+            }
+        }
+    }
+}
+
+fn read_board_from_user() -> Board {
     let mut input_buffer = String::new();
     while !input_buffer.ends_with("\n\n") {
         std::io::stdin()
             .read_line(&mut input_buffer)
             .expect("Input contained illegal characters");
     }
-    let mut board = Board::parse(&input_buffer).expect("Input is not a valid board");
-    println!("{}", board.write(true));
-
-    let mut turns = 0;
-    let mut total_duration = Duration::ZERO;
-
-    /* Two AIs, Min and Max play the game, alternating turns. Min starts. */
-    for &player in [Player::Min, Player::Max].iter().cycle() {
-        let start_time = Instant::now();
-
-        /* The player chooses the next turn. */
-        let (next_board, val, visited) = choose_move(player, &board, 6, i32::MIN + 1, i32::MAX);
-        let value = player.sign() * val;
-
-        match next_board {
-            None => {
-                if value > 0 {
-                    println!("\nMax won!");
-                } else if value < 0 {
-                    println!("\nMin won!")
-                } else {
-                    println!("\nDraw!")
-                }
-                println!("(average turn took {:?})", total_duration / turns);
-                break;
-            }
-            Some(next_board) => {
-                let duration = start_time.elapsed();
-                println!(
-                    "\n{}'s turn\ntook {:?}, evaluated {} boards, value {}\n{}",
-                    match player {
-                        Player::Min => "Min",
-                        Player::Max => "Max",
-                    },
-                    duration,
-                    visited,
-                    value,
-                    next_board.write(true)
-                );
-                total_duration += duration;
-                turns += 1;
-                board = next_board;
-            }
-        }
-    }
+    return Board::parse(&input_buffer).expect("Input is not a valid board");
 }
 
 /* Minimax algorithm with alpha-beta pruning. This form is also called negamax. This function
