@@ -4,7 +4,11 @@ mod board;
 mod tests;
 
 use board::*;
-use std::time::{Duration, Instant};
+use rayon::prelude::*;
+use std::{
+    sync::atomic::{AtomicI32, Ordering},
+    time::{Duration, Instant},
+};
 
 fn main() {
     /* Game mode is given as a command line argument. */
@@ -40,7 +44,8 @@ fn main() {
         let start_time = Instant::now();
 
         /* The player chooses a move. */
-        let (next_board, val, visited) = choose_move(player, &board, 6, i32::MIN + 1, i32::MAX);
+        let (next_board, val, visited) =
+            parallel_choose_move(player, &board, 6, i32::MIN + 1, i32::MAX);
         let value = player.sign() * val;
 
         match next_board {
@@ -110,6 +115,74 @@ fn read_board_from_user() -> Board {
             .expect("Input contained illegal characters");
     }
     return Board::parse(&input_buffer).expect("Input is not a valid board");
+}
+
+fn parallel_choose_move(
+    player: Player,
+    board: &Board,
+    heuristic_depth: u32,
+    alpha: i32,
+    beta: i32,
+) -> (Option<Board>, i32, u64) {
+    let next_player = match player {
+        Player::Min => Player::Max,
+        Player::Max => Player::Min,
+    };
+
+    /* Collect all moves into a vec and sort them before iterating them. Sort them by their
+     * heuristic value so that moves with a better heuristic value are processed first. This
+     * will cause alpha-beta pruning to kick in sooner. */
+    let mut moves = board.possible_moves(player).collect::<Vec<Board>>();
+    /* Min's moves are sorted smallest heuristic first and Max's by largest first. */
+    moves.sort_by_cached_key(|next_board| -player.sign() * next_board.heuristic_evaluate());
+
+    let alpha = AtomicI32::new(alpha);
+
+    /* Choosing the maximum value move. The moves are evaluated using minimax recursively on them. */
+    let result = moves
+        .into_par_iter()
+        .map(|next_board| {
+            /* This move is evaluated by the opposite player. For that reason both the alpha and
+             * beta bounds and the resulting value are negated. This allows us to use the same
+             * function for both players. */
+            let (_, val, visited) = choose_move(
+                next_player,
+                &next_board,
+                heuristic_depth - 1,
+                -beta,
+                -alpha.load(Ordering::SeqCst),
+            );
+            let value = -val;
+
+            return (Some(next_board), value, visited);
+        })
+        .reduce(
+            || (None, i32::MIN, 0),
+            |(mut chosen_move, mut max_value, mut total_visited), (next_board, value, visited)| {
+                total_visited += visited;
+                if value > max_value {
+                    max_value = value;
+                    chosen_move = next_board;
+
+                    /* Now that we have a value of at least max_value, we can increase alpha to
+                     * signal that we are not interested in child branches that produce a lower
+                     * value. */
+                    alpha.fetch_max(max_value, Ordering::SeqCst);
+                }
+
+                return (chosen_move, max_value, total_visited);
+            },
+        );
+    let (chosen_move, max_value, total_visited) = result;
+
+    /* If there were no possible moves, fall back to heuristic evaluation. */
+    if chosen_move == None {
+        let max_value = player.sign() * board.heuristic_evaluate();
+        let total_visited = 1;
+        return (chosen_move, max_value, total_visited);
+    } else {
+        return (chosen_move, max_value, total_visited);
+    }
 }
 
 /* Minimax algorithm with alpha-beta pruning. This form is also called negamax. This function
