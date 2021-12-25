@@ -4,9 +4,11 @@ mod board;
 mod tests;
 
 use board::*;
-use rayon::prelude::*;
 use std::{
-    sync::atomic::{AtomicI32, Ordering},
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Mutex,
+    },
     time::{Duration, Instant},
 };
 
@@ -141,44 +143,48 @@ fn choose_move(
     /* Min's moves are sorted smallest heuristic first and Max's by largest first. */
     moves.sort_by_cached_key(|next_board| -player.sign() * next_board.heuristic_evaluate());
 
+    /* Result is wrapped in a mutex so it can be updated from multiple threads. */
+    let result = Mutex::new((None, i32::MIN, 0));
+    /* Alpha is an atomic integer so it can be accessed from multiple threads. It is not wrapped in
+     * the same mutex as result, because it is accessed more often. */
     let alpha = AtomicI32::new(alpha);
 
-    /* Choosing the maximum value move. The moves are evaluated using minimax recursively on them. */
-    let result = moves
-        .into_par_iter()
-        .map(|next_board| {
-            /* This move is evaluated by the opposite player. For that reason both the alpha and
-             * beta bounds and the resulting value are negated. This allows us to use the same
-             * function for both players. */
-            let (val, visited) = evaluate(
-                next_player,
-                &next_board,
-                heuristic_depth - 1,
-                -beta,
-                -alpha.load(Ordering::SeqCst),
-            );
-            let value = -val;
+    /* Wait until all jobs spawned inside this scope are completed. */
+    rayon::scope_fifo(|s| {
+        /* Parallelization: Instead of evaluating moves one by one, spawn an evaluation job into a
+         * thread pool for each move. */
+        for next_board in moves.into_iter() {
+            s.spawn_fifo(|_| {
+                /* This move is evaluated by the opposite player. For that reason both the alpha and
+                 * beta bounds and the resulting value are negated. This allows us to use the same
+                 * function for both players. */
+                let (val, visited) = evaluate(
+                    next_player,
+                    &next_board,
+                    heuristic_depth - 1,
+                    -beta,
+                    -alpha.load(Ordering::SeqCst),
+                );
+                let value = -val;
 
-            return (Some(next_board), value, visited);
-        })
-        .reduce(
-            || (None, i32::MIN, 0),
-            |(mut chosen_move, mut max_value, mut total_visited), (next_board, value, visited)| {
-                total_visited += visited;
-                if value > max_value {
-                    max_value = value;
-                    chosen_move = next_board;
+                /* Mutex is locked here. We can now update result. */
+                let (chosen_move, max_value, total_visited) = &mut *result.lock().unwrap();
+
+                *total_visited += visited;
+                if value > *max_value {
+                    *max_value = value;
+                    *chosen_move = Some(next_board);
 
                     /* Now that we have a value of at least max_value, we can increase alpha to
                      * signal that we are not interested in child branches that produce a lower
                      * value. */
-                    alpha.fetch_max(max_value, Ordering::SeqCst);
+                    alpha.fetch_max(*max_value, Ordering::SeqCst);
                 }
-
-                return (chosen_move, max_value, total_visited);
-            },
-        );
-    let (chosen_move, max_value, total_visited) = result;
+                /* Mutex is unlocked here. */
+            });
+        }
+    });
+    let (chosen_move, max_value, total_visited) = result.into_inner().unwrap();
 
     /* If there were no possible moves, fall back to heuristic evaluation. */
     if max_value == i32::MIN {
