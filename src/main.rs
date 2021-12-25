@@ -45,7 +45,7 @@ fn main() {
 
         /* The player chooses a move. */
         let (next_board, val, visited) =
-            parallel_choose_move(player, &board, 6, i32::MIN + 1, i32::MAX);
+            parallel_choose_move(player, &board, 7, i32::MIN + 1, i32::MAX);
         let value = player.sign() * val;
 
         match next_board {
