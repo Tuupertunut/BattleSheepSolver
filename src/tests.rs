@@ -165,3 +165,66 @@ fn less_blocked_evaluates_higher_than_blocked() {
             > 0
     );
 }
+
+#[test]
+fn ai_chooses_only_option_and_loses() {
+    let max_can_move = "
+     0
+   0   0   0
+     0   0
+  -2
++2   0   0   0   0   0   0   0   0   0
+"
+    .trim_matches('\n');
+    /* Min gets larger connected field and wins on next turn. */
+    let max_moved = "
+     0
+   0   0   0
+     0   0
+  -2
++1   0   0   0   0   0   0   0   0  +1
+"
+    .trim_matches('\n');
+    let (next_board, val, visited) = choose_move(
+        Player::Max,
+        &Board::parse(max_can_move).unwrap(),
+        5,
+        i32::MIN + 1,
+        i32::MAX,
+    );
+    let value = Player::Max.sign() * val;
+    assert_eq!(next_board, Some(Board::parse(max_moved).unwrap()));
+    assert_eq!(value, -1000000);
+    assert!(visited > 0);
+}
+
+#[test]
+fn ai_chooses_immediate_win() {
+    let min_will_win = "
+     0
+   0   0   0
+     0   0
+  -2
++2   0   0   0   0   0   0   0   0   0
+"
+    .trim_matches('\n');
+    let min_wins = "
+     0
+   0   0   0
+     0   0
+  -1
++2  -1   0   0   0   0   0   0   0   0
+"
+    .trim_matches('\n');
+    let (next_board, val, visited) = choose_move(
+        Player::Min,
+        &Board::parse(min_will_win).unwrap(),
+        5,
+        i32::MIN + 1,
+        i32::MAX,
+    );
+    let value = Player::Min.sign() * val;
+    assert_eq!(next_board, Some(Board::parse(min_wins).unwrap()));
+    assert_eq!(value, -1000000);
+    assert!(visited > 0);
+}

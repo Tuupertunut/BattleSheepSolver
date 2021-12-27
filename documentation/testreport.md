@@ -6,7 +6,7 @@ The minimax algorithm and the game board have many complex functions where it is
 
 Currently, the board code is very thoroughly tested. Most of the tests test the heuristic evaluation function, as it needs to satisfy certain conditions. For example, the heuristic needs to always evaluate a winning state higher than any non-winning state. The boards for testing the functions have been selected to contain as many corner cases as possible.
 
-The minimax algorithm is not yet tested.
+The minimax algorithm/AI code is hard to test because it is not completely deterministic, and also because it is not required to be particularly skilled at the game. Nevertheless there are a few tests for some trivial cases where any sensible AI should produce the same results.
 
 ### Test coverage
 
