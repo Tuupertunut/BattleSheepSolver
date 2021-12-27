@@ -1,7 +1,7 @@
 # Requirements
 The goal is to implement an AI (or "solver") for the board game Battle Sheep. The rules of Battle Sheep can be found in https://blueorangegames.eu/wp-content/uploads/2017/05/BATTLE-SHEEP_rules_ML.pdf. The original Battle Sheep can be played by 2-4 people. It starts by laying out the board, placing the starting stacks and then taking turns moving them.
 
-In the scope of this project, it is enough if the AI can play a 2 player game with a predetermined board. The AI should on average complete one turn in 500 ms on a modern computer, which is roughly the time that the best human players would need to move their stacks. The time may vary substantially from turn to turn depending on how complex the situation in the game is. The game can be played in two modes: AI vs AI and AI vs human.
+In the scope of this project, it is enough if the AI can play a 2 player game with a predetermined board. The AI should on average complete one turn in 1 second on a modern computer, which is roughly the time that the best human players would need to move their stacks. The time may vary substantially from turn to turn depending on how complex the situation in the game is. The game can be played in two modes: AI vs AI and AI vs human.
 
 ## UI
 In the MVP version there is a text based command line interface.

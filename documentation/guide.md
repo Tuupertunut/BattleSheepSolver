@@ -8,7 +8,13 @@ The program is written in Rust. To run it, you need Cargo, the Rust build tool. 
 
 ## How to run
 
-To run the program, run `cargo run --release` in the project folder. Note: It is important to use the `--release` flag which makes the program run about 100x faster.
+There are two game modes in this program: watch mode and play mode. Game mode is selected with a command line flag `-w` or `-p`.
+
+To run the program in watch mode, run `cargo run --release -- -w` in the project folder.
+
+To run it in play mode, run `cargo run --release -- -p`.
+
+Note: It is important to use the `--release` flag which makes the program run about 100x faster.
 
 ## How to use
 
@@ -35,9 +41,21 @@ After entering a board, write an empty line to continue. The program should now 
 
 Battle sheep is played on a hexagonal grid and that is what the grid of numbers is trying to represent. Straight lines are found on the horizontal, descending diagonal and ascending diagonal axes. Note that the vertical axis does not represent a straight line even though it may look like so in some terminals.
 
-There are two AI players in the game: Min and Max. Red tiles starting with - are Min's stacks and blue ones with + are Max's stacks. The number represents the stack size. Tiles with a green 0 are empty tiles.
+There are two players in the game: Min and Max. Red tiles starting with - are Min's stacks and blue ones with + are Max's stacks. The number represents the stack size. Tiles with a green 0 are empty tiles.
 
-Min always starts the game. The players take turns playing the game until one wins.
+### Game modes
+
+#### Watch mode
+
+In watch mode, you watch two AIs play against each other. You enter a starting board, and the AIs will play until the game ends. Min always starts the game.
+
+#### Play mode
+
+In play mode, you play against the AI. On each turn, you enter a new board where you have made your move. The AI will then respond by making its move and printing out the board.
+
+You play as Max and your AI opponent is Min. You can choose who starts by either entering a fresh starting board or one where you have made the first move.
+
+A good way to play is to copy the AI's output board into a text editor, make your move, and paste it back to the terminal.
 
 ## How to test
 
