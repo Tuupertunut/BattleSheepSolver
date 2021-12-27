@@ -188,7 +188,7 @@ fn ai_chooses_only_option_and_loses() {
     let (next_board, val, visited) = choose_move(
         Player::Max,
         &Board::parse(max_can_move).unwrap(),
-        5,
+        2,
         i32::MIN + 1,
         i32::MAX,
     );
