@@ -131,14 +131,9 @@ fn choose_move(
     alpha: i32,
     beta: i32,
 ) -> (Option<Board>, i32, u64) {
-    let next_player = match player {
-        Player::Min => Player::Max,
-        Player::Max => Player::Min,
-    };
-
     /* Collect all moves into a vec and sort them before iterating them. Sort them by their
-     * heuristic value so that moves with a better heuristic value are processed first. This
-     * will cause alpha-beta pruning to kick in sooner. */
+     * heuristic value so that moves with a better heuristic value are processed first. This will
+     * cause alpha-beta pruning to kick in sooner. */
     let mut moves_vec = board.possible_moves(player).collect::<Vec<Board>>();
     /* Min's moves are sorted smallest heuristic first and Max's by largest first. */
     moves_vec.sort_by_cached_key(|next_board| -player.sign() * next_board.heuristic_evaluate());
@@ -156,7 +151,7 @@ fn choose_move(
          * bounds and the resulting value are negated. This allows us to use the same function for
          * both players. */
         let (val, visited) = evaluate(
-            next_player,
+            player.opposite(),
             &next_board,
             heuristic_depth - 1,
             -beta,
@@ -172,9 +167,8 @@ fn choose_move(
             *max_value = value;
             *chosen_move = Some(next_board);
 
-            /* Now that we have a value of at least max_value, we can increase alpha to
-             * signal that we are not interested in child branches that produce a lower
-             * value. */
+            /* Now that we have a value of at least max_value, we can increase alpha to signal that
+             * we are not interested in child branches that produce a lower value. */
             alpha.fetch_max(*max_value, Ordering::SeqCst);
         }
         /* Mutex is unlocked here. */
@@ -264,11 +258,6 @@ fn minimax_evaluate<I: Iterator<Item = Board>>(
     alpha: i32,
     beta: i32,
 ) -> (i32, u64) {
-    let next_player = match player {
-        Player::Min => Player::Max,
-        Player::Max => Player::Min,
-    };
-
     let mut max_value = i32::MIN;
     let mut total_visited = 0;
 
@@ -279,7 +268,13 @@ fn minimax_evaluate<I: Iterator<Item = Board>>(
         /* This move is evaluated by the opposite player. For that reason both the alpha and beta
          * bounds and the resulting value are negated. This allows us to use the same function for
          * both players. */
-        let (val, visited) = evaluate(next_player, &next_board, heuristic_depth - 1, -beta, -alpha);
+        let (val, visited) = evaluate(
+            player.opposite(),
+            &next_board,
+            heuristic_depth - 1,
+            -beta,
+            -alpha,
+        );
         let value = -val;
 
         total_visited += visited;

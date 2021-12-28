@@ -15,6 +15,13 @@ impl Player {
             Self::Max => 1,
         }
     }
+
+    pub fn opposite(self) -> Player {
+        match self {
+            Player::Min => Player::Max,
+            Player::Max => Player::Min,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
