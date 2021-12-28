@@ -139,9 +139,10 @@ fn choose_move(
     /* Collect all moves into a vec and sort them before iterating them. Sort them by their
      * heuristic value so that moves with a better heuristic value are processed first. This
      * will cause alpha-beta pruning to kick in sooner. */
-    let mut moves = board.possible_moves(player).collect::<Vec<Board>>();
+    let mut moves_vec = board.possible_moves(player).collect::<Vec<Board>>();
     /* Min's moves are sorted smallest heuristic first and Max's by largest first. */
-    moves.sort_by_cached_key(|next_board| -player.sign() * next_board.heuristic_evaluate());
+    moves_vec.sort_by_cached_key(|next_board| -player.sign() * next_board.heuristic_evaluate());
+    let mut moves = moves_vec.into_iter();
 
     /* Result is wrapped in a mutex so it can be updated from multiple threads. */
     let result = Mutex::new((None, i32::MIN, 0));
@@ -149,41 +150,51 @@ fn choose_move(
      * the same mutex as result, because it is accessed more often. */
     let alpha = AtomicI32::new(alpha);
 
-    /* Wait until all jobs spawned inside this scope are completed. */
+    /* Closure that will be executed in the thread pool. */
+    let evaluate_in_thread = |next_board| {
+        /* This move is evaluated by the opposite player. For that reason both the alpha and beta
+         * bounds and the resulting value are negated. This allows us to use the same function for
+         * both players. */
+        let (val, visited) = evaluate(
+            next_player,
+            &next_board,
+            heuristic_depth - 1,
+            -beta,
+            -alpha.load(Ordering::SeqCst),
+        );
+        let value = -val;
+
+        /* Mutex is locked here. We can now update result. */
+        let (chosen_move, max_value, total_visited) = &mut *result.lock().unwrap();
+
+        *total_visited += visited;
+        if value > *max_value {
+            *max_value = value;
+            *chosen_move = Some(next_board);
+
+            /* Now that we have a value of at least max_value, we can increase alpha to
+             * signal that we are not interested in child branches that produce a lower
+             * value. */
+            alpha.fetch_max(*max_value, Ordering::SeqCst);
+        }
+        /* Mutex is unlocked here. */
+    };
+
+    /* Evaluate the first move before starting the parallel evaluation. This is called the Young
+     * Brothers Wait Concept optimization. It ensures that all parallel evaluation jobs have a good
+     * alpha value to start with. */
+    if let Some(next_board) = moves.next() {
+        evaluate_in_thread(next_board);
+    }
+
+    /* Parallelization: Instead of evaluating moves one by one, spawn an evaluation job into a
+     * thread pool for each move. Then wait until all jobs spawned inside this scope are completed. */
     rayon::scope_fifo(|s| {
-        /* Parallelization: Instead of evaluating moves one by one, spawn an evaluation job into a
-         * thread pool for each move. */
-        for next_board in moves.into_iter() {
-            s.spawn_fifo(|_| {
-                /* This move is evaluated by the opposite player. For that reason both the alpha and
-                 * beta bounds and the resulting value are negated. This allows us to use the same
-                 * function for both players. */
-                let (val, visited) = evaluate(
-                    next_player,
-                    &next_board,
-                    heuristic_depth - 1,
-                    -beta,
-                    -alpha.load(Ordering::SeqCst),
-                );
-                let value = -val;
-
-                /* Mutex is locked here. We can now update result. */
-                let (chosen_move, max_value, total_visited) = &mut *result.lock().unwrap();
-
-                *total_visited += visited;
-                if value > *max_value {
-                    *max_value = value;
-                    *chosen_move = Some(next_board);
-
-                    /* Now that we have a value of at least max_value, we can increase alpha to
-                     * signal that we are not interested in child branches that produce a lower
-                     * value. */
-                    alpha.fetch_max(*max_value, Ordering::SeqCst);
-                }
-                /* Mutex is unlocked here. */
-            });
+        for next_board in moves {
+            s.spawn_fifo(|_| evaluate_in_thread(next_board));
         }
     });
+
     let (chosen_move, max_value, total_visited) = result.into_inner().unwrap();
 
     /* If there were no possible moves, fall back to heuristic evaluation. */
@@ -218,18 +229,19 @@ fn evaluate(
             /* Collect all moves into a vec and sort them before iterating them. Sort them by their
              * heuristic value so that moves with a better heuristic value are processed first. This
              * will cause alpha-beta pruning to kick in sooner. */
-            let mut moves = board.possible_moves(player).collect::<Vec<Board>>();
+            let mut moves_vec = board.possible_moves(player).collect::<Vec<Board>>();
             /* Min's moves are sorted smallest heuristic first and Max's by largest first. */
-            moves.sort_by_cached_key(|next_board| -player.sign() * next_board.heuristic_evaluate());
+            moves_vec
+                .sort_by_cached_key(|next_board| -player.sign() * next_board.heuristic_evaluate());
 
-            let iter = moves.into_iter();
-            result = minimax_evaluate(player, iter, heuristic_depth, alpha, beta);
+            let moves = moves_vec.into_iter();
+            result = minimax_evaluate(player, moves, heuristic_depth, alpha, beta);
         } else {
             /* Moves generated at depth 1 will only be evaluated by the heuristic, so they don't
              * need to be sorted. Just iterate the moves. */
-            let iter = board.possible_moves(player);
-            result = minimax_evaluate(player, iter, heuristic_depth, alpha, beta);
-        };
+            let moves = board.possible_moves(player);
+            result = minimax_evaluate(player, moves, heuristic_depth, alpha, beta);
+        }
         let (max_value, total_visited) = result;
 
         /* If there were no possible moves, fall back to heuristic evaluation. */
