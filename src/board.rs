@@ -1,3 +1,4 @@
+use either::Either;
 use std::error::Error;
 use std::iter;
 use std::ops::{Index, IndexMut};
@@ -239,58 +240,112 @@ impl Board {
 
     /* Iterates through all possible next moves for a player. */
     pub fn possible_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
-        /* Iterate through all tiles. */
-        return self
+        let player_has_stacks = self
             .iter_row_major()
-            /* Check if the tile is a splittable stack of this player. */
-            .filter(
-                move |&(_, tile)| matches!(tile, Tile::Stack(p, size) if p == player && size > 1),
-            )
-            .flat_map(move |(orig_coords, tile)| {
-                /* We already know from the above check that tile must be a stack. */
-                let size = match tile {
-                    Tile::Stack(_, size) => size,
-                    _ => unreachable!(),
-                };
+            .any(|(_, tile)| matches!(tile, Tile::Stack(p, _) if p == player));
+        if !player_has_stacks {
+            return Either::Left(self.possible_starting_moves(player));
+        } else {
+            return Either::Right(
+                /* Iterate through all tiles. */
+                self.iter_row_major()
+                    /* Check if the tile is a splittable stack of this player. */
+                    .filter_map(move |(orig_coords, tile)| match tile {
+                        Tile::Stack(p, size) if p == player && size > 1 => {
+                            Some((orig_coords, size))
+                        }
+                        _ => None,
+                    })
+                    .flat_map(move |(orig_coords, stack_size)| {
+                        /* Iterate through all straight line directions. */
+                        return NEIGHBOR_OFFSETS
+                            .iter()
+                            /* Move to a direction as far as there are empty tiles. */
+                            .map(move |&dir_offset| {
+                                let mut coords = orig_coords;
+                                loop {
+                                    /* Coordinates for the next tile in the direction.
+                                     * Hack: negative numbers cannot be added to a usize, so they
+                                     * are converted into usize with underflow and then added with
+                                     * overflow.
+                                     * Same as: let next_coords = coords + dir_offset */
+                                    let next_coords = (
+                                        coords.0.wrapping_add(dir_offset.0 as usize),
+                                        coords.1.wrapping_add(dir_offset.1 as usize),
+                                    );
 
-                /* Iterate through all straight line directions. */
-                return NEIGHBOR_OFFSETS
-                    .iter()
-                    /* Move to a direction as far as there are empty tiles. */
-                    .map(move |&dir_offset| {
-                        let mut coords = orig_coords;
-                        loop {
-                            /* Coordinates for the next tile in the direction.
-                             * Hack: negative numbers cannot be added to a usize, so they are
-                             * converted into usize with underflow and then added with overflow.
-                             * Same as: let next_coords = coords + dir_offset */
-                            let next_coords = (
-                                coords.0.wrapping_add(dir_offset.0 as usize),
-                                coords.1.wrapping_add(dir_offset.1 as usize),
-                            );
+                                    /* If next tile is empty, move to that tile. */
+                                    if self[next_coords] == Tile::Empty {
+                                        coords = next_coords;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                return coords;
+                            })
+                            /* Check if we actually found any empty tiles in the direction. */
+                            .filter(move |&coords| coords != orig_coords)
+                            .flat_map(move |coords| {
+                                /* Iterate through all the ways to split the stack. */
+                                return (1..stack_size).map(move |split| {
+                                    /* Create the next board. */
+                                    let mut next_board = self.clone();
+                                    next_board[coords] = Tile::Stack(player, split);
+                                    next_board[orig_coords] =
+                                        Tile::Stack(player, stack_size - split);
+                                    return next_board;
+                                });
+                            });
+                    }),
+            );
+        }
+    }
 
-                            /* If next tile is empty, move to that tile. */
-                            if self[next_coords] == Tile::Empty {
-                                coords = next_coords;
-                            } else {
-                                break;
+    fn possible_starting_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
+        let is_visited = |visited: &Vec<bool>, (r, q)| visited[self.row_length * r + q];
+        let set_visited = |visited: &mut Vec<bool>, (r, q)| visited[self.row_length * r + q] = true;
+
+        let mut visited = vec![false; self.tiles.len()];
+        let mut dfs_stack = Vec::<(usize, usize)>::new();
+
+        let mut board_edge = Vec::<(usize, usize)>::new();
+
+        for (start_coords, tile) in self.iter_row_major() {
+            let (r, q) = start_coords;
+            let is_array_edge =
+                r == 0 || r == self.num_rows() - 1 || q == 0 || q == self.row_length - 1;
+            if is_array_edge {
+                if !is_visited(&visited, start_coords) {
+                    set_visited(&mut visited, start_coords);
+                    match tile {
+                        Tile::NoTile => dfs_stack.push(start_coords),
+                        Tile::Empty => board_edge.push(start_coords),
+                        _ => {}
+                    }
+                    while let Some(coords) = dfs_stack.pop() {
+                        for (neighbor_coords, neighbor) in self.iter_neighbors(coords) {
+                            let (r, q) = neighbor_coords;
+                            let is_in_array = r < self.num_rows() && q < self.row_length;
+                            if is_in_array && !is_visited(&visited, neighbor_coords) {
+                                set_visited(&mut visited, neighbor_coords);
+                                match neighbor {
+                                    Tile::NoTile => dfs_stack.push(neighbor_coords),
+                                    Tile::Empty => board_edge.push(neighbor_coords),
+                                    _ => {}
+                                }
                             }
                         }
-                        return coords;
-                    })
-                    /* Check if we actually found any empty tiles in the direction. */
-                    .filter(move |&coords| coords != orig_coords)
-                    .flat_map(move |coords| {
-                        /* Iterate through all the ways to split the stack. */
-                        return (1..size).map(move |split| {
-                            /* Create the next board. */
-                            let mut next_board = self.clone();
-                            next_board[coords] = Tile::Stack(player, split);
-                            next_board[orig_coords] = Tile::Stack(player, size - split);
-                            return next_board;
-                        });
-                    });
-            });
+                    }
+                }
+            }
+        }
+
+        return board_edge.into_iter().map(move |coords| {
+            /* Create the next board. */
+            let mut next_board = self.clone();
+            next_board[coords] = Tile::Stack(player, 16);
+            return next_board;
+        });
     }
 
     /* Evaluates the current board state. Positive number means Max has an advantage, negative means

@@ -66,6 +66,58 @@ fn possible_moves_are_found() {
 }
 
 #[test]
+fn possible_starting_moves_are_found() {
+    let input = "
+  +16  0
+ 0   0   0
+   0   0
+"
+    .trim_matches('\n');
+    let min_moves = [
+        "
+  +16 -16
+ 0   0   0
+   0   0
+"
+        .trim_matches('\n'),
+        "
+  +16  0
+ 0   0  -16
+   0   0
+"
+        .trim_matches('\n'),
+        "
+  +16  0
+ 0   0   0
+   0  -16
+"
+        .trim_matches('\n'),
+        "
+  +16  0
+ 0   0   0
+  -16  0
+"
+        .trim_matches('\n'),
+        "
+  +16  0
+-16  0   0
+   0   0
+"
+        .trim_matches('\n'),
+    ];
+    assert_eq!(
+        Board::parse(input)
+            .unwrap()
+            .possible_moves(Player::Min)
+            .collect::<HashSet<Board>>(),
+        min_moves
+            .iter()
+            .map(|s| Board::parse(s).unwrap())
+            .collect::<HashSet<Board>>()
+    );
+}
+
+#[test]
 fn win_evaluates_as_winners_advantage() {
     let max_wins = "
   +14 +1   0   0
