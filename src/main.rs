@@ -118,6 +118,17 @@ fn read_board_from_user() -> Board {
     return Board::parse(&input_buffer).expect("Input is not a valid board");
 }
 
+fn sort_iter_by_cached_key<I, T, F, K>(iter: I, f: F) -> impl Iterator<Item = T>
+where
+    I: Iterator<Item = T>,
+    F: FnMut(&T) -> K,
+    K: Ord,
+{
+    let mut vec = iter.collect::<Vec<T>>();
+    vec.sort_by_cached_key(f);
+    return vec.into_iter();
+}
+
 /* Minimax algorithm functions. This variant of minimax is using alpha-beta pruning, move ordering
  * and parallelization to optimize its performance. It is also organized in a way called negamax,
  * where both Min and Max use the same evaluation function. */
@@ -131,13 +142,13 @@ fn choose_move(
     alpha: i32,
     beta: i32,
 ) -> (Option<Board>, i32, u64) {
-    /* Collect all moves into a vec and sort them before iterating them. Sort them by their
-     * heuristic value so that moves with a better heuristic value are processed first. This will
-     * cause alpha-beta pruning to kick in sooner. */
-    let mut moves_vec = board.possible_moves(player).collect::<Vec<Board>>();
-    /* Min's moves are sorted smallest heuristic first and Max's by largest first. */
-    moves_vec.sort_by_cached_key(|next_board| -player.sign() * next_board.heuristic_evaluate());
-    let mut moves = moves_vec.into_iter();
+    /* Sort all moves before iterating them. Sort them by their heuristic value so that moves with a
+     * better heuristic value are processed first. This will cause alpha-beta pruning to take effect
+     * sooner.
+     * Min's moves are sorted smallest heuristic first and Max's by largest first. */
+    let mut moves = sort_iter_by_cached_key(board.possible_moves(player), |next_board| {
+        -player.sign() * next_board.heuristic_evaluate()
+    });
 
     /* Result is wrapped in a mutex so it can be updated from multiple threads. */
     let result = Mutex::new((None, i32::MIN, 0));
@@ -220,15 +231,13 @@ fn evaluate(
          * moves. */
         let result;
         if heuristic_depth > 1 {
-            /* Collect all moves into a vec and sort them before iterating them. Sort them by their
-             * heuristic value so that moves with a better heuristic value are processed first. This
-             * will cause alpha-beta pruning to kick in sooner. */
-            let mut moves_vec = board.possible_moves(player).collect::<Vec<Board>>();
-            /* Min's moves are sorted smallest heuristic first and Max's by largest first. */
-            moves_vec
-                .sort_by_cached_key(|next_board| -player.sign() * next_board.heuristic_evaluate());
-
-            let moves = moves_vec.into_iter();
+            /* Sort all moves before iterating them. Sort them by their heuristic value so that
+             * moves with a better heuristic value are processed first. This will cause alpha-beta
+             * pruning to take effect sooner.
+             * Min's moves are sorted smallest heuristic first and Max's by largest first. */
+            let moves = sort_iter_by_cached_key(board.possible_moves(player), |next_board| {
+                -player.sign() * next_board.heuristic_evaluate()
+            });
             result = minimax_evaluate(player, moves, heuristic_depth, alpha, beta);
         } else {
             /* Moves generated at depth 1 will only be evaluated by the heuristic, so they don't
