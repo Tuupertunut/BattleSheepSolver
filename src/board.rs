@@ -243,64 +243,66 @@ impl Board {
         let player_has_stacks = self
             .iter_row_major()
             .any(|(_, tile)| matches!(tile, Tile::Stack(p, _) if p == player));
-        if !player_has_stacks {
-            return Either::Left(self.possible_starting_moves(player));
-        } else {
-            return Either::Right(
-                /* Iterate through all tiles. */
-                self.iter_row_major()
-                    /* Check if the tile is a splittable stack of this player. */
-                    .filter_map(move |(orig_coords, tile)| match tile {
-                        Tile::Stack(p, size) if p == player && size > 1 => {
-                            Some((orig_coords, size))
-                        }
-                        _ => None,
-                    })
-                    .flat_map(move |(orig_coords, stack_size)| {
-                        /* Iterate through all straight line directions. */
-                        return NEIGHBOR_OFFSETS
-                            .iter()
-                            /* Move to a direction as far as there are empty tiles. */
-                            .map(move |&dir_offset| {
-                                let mut coords = orig_coords;
-                                loop {
-                                    /* Coordinates for the next tile in the direction.
-                                     * Hack: negative numbers cannot be added to a usize, so they
-                                     * are converted into usize with underflow and then added with
-                                     * overflow.
-                                     * Same as: let next_coords = coords + dir_offset */
-                                    let next_coords = (
-                                        coords.0.wrapping_add(dir_offset.0 as usize),
-                                        coords.1.wrapping_add(dir_offset.1 as usize),
-                                    );
 
-                                    /* If next tile is empty, move to that tile. */
-                                    if self[next_coords] == Tile::Empty {
-                                        coords = next_coords;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                return coords;
-                            })
-                            /* Check if we actually found any empty tiles in the direction. */
-                            .filter(move |&coords| coords != orig_coords)
-                            .flat_map(move |coords| {
-                                /* Iterate through all the ways to split the stack. */
-                                return (1..stack_size).map(move |split| {
-                                    /* Create the next board. */
-                                    let mut next_board = self.clone();
-                                    next_board[coords] = Tile::Stack(player, split);
-                                    next_board[orig_coords] =
-                                        Tile::Stack(player, stack_size - split);
-                                    return next_board;
-                                });
-                            });
-                    }),
-            );
+        if player_has_stacks {
+            return Either::Right(self.possible_regular_moves(player));
+        } else {
+            return Either::Left(self.possible_starting_moves(player));
         }
     }
 
+    /* Iterates through regular moves where player splits a stack and moves it. */
+    fn possible_regular_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
+        /* Iterate through all tiles. */
+        return self
+            .iter_row_major()
+            /* Check if the tile is a splittable stack of this player. */
+            .filter_map(move |(orig_coords, tile)| match tile {
+                Tile::Stack(p, size) if p == player && size > 1 => Some((orig_coords, size)),
+                _ => None,
+            })
+            .flat_map(move |(orig_coords, stack_size)| {
+                /* Iterate through all straight line directions. */
+                return NEIGHBOR_OFFSETS
+                    .iter()
+                    /* Move to a direction as far as there are empty tiles. */
+                    .map(move |&dir_offset| {
+                        let mut coords = orig_coords;
+                        loop {
+                            /* Coordinates for the next tile in the direction.
+                             * Hack: negative numbers cannot be added to a usize, so they are
+                             * converted into usize with underflow and then added with overflow.
+                             * Same as: let next_coords = coords + dir_offset */
+                            let next_coords = (
+                                coords.0.wrapping_add(dir_offset.0 as usize),
+                                coords.1.wrapping_add(dir_offset.1 as usize),
+                            );
+
+                            /* If next tile is empty, move to that tile. */
+                            if self[next_coords] == Tile::Empty {
+                                coords = next_coords;
+                            } else {
+                                break;
+                            }
+                        }
+                        return coords;
+                    })
+                    /* Check if we actually found any empty tiles in the direction. */
+                    .filter(move |&coords| coords != orig_coords)
+                    .flat_map(move |coords| {
+                        /* Iterate through all the ways to split the stack. */
+                        return (1..stack_size).map(move |split| {
+                            /* Create the next board. */
+                            let mut next_board = self.clone();
+                            next_board[coords] = Tile::Stack(player, split);
+                            next_board[orig_coords] = Tile::Stack(player, stack_size - split);
+                            return next_board;
+                        });
+                    });
+            });
+    }
+
+    /* Iterates through starting moves where player places a stack on the outer edge. */
     fn possible_starting_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
         let is_visited = |visited: &Vec<bool>, (r, q)| visited[self.row_length * r + q];
         let set_visited = |visited: &mut Vec<bool>, (r, q)| visited[self.row_length * r + q] = true;
