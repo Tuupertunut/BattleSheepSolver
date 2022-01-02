@@ -83,7 +83,7 @@ impl Board {
         return self.tiles.chunks_exact(self.row_length).enumerate();
     }
 
-    /* Iterates through all neighbors of the given coordinates. */
+    /* Iterates through all neighbors of the given coordinates in clockwise direction. */
     pub fn iter_neighbors(
         &self,
         coords: (usize, usize),
@@ -304,42 +304,43 @@ impl Board {
 
     /* Iterates through starting moves where player places a stack on the outer edge. */
     fn possible_starting_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
-        let is_visited = |visited: &Vec<bool>, (r, q)| visited[self.row_length * r + q];
-        let set_visited = |visited: &mut Vec<bool>, (r, q)| visited[self.row_length * r + q] = true;
-
-        let mut visited = vec![false; self.tiles.len()];
-        let mut dfs_stack = Vec::<(usize, usize)>::new();
-
         let mut board_edge = Vec::<(usize, usize)>::new();
 
-        for (start_coords, tile) in self.iter_row_major() {
-            let (r, q) = start_coords;
-            let is_array_edge =
-                r == 0 || r == self.num_rows() - 1 || q == 0 || q == self.row_length - 1;
-            if is_array_edge {
-                if !is_visited(&visited, start_coords) {
-                    set_visited(&mut visited, start_coords);
-                    match tile {
-                        Tile::NoTile => dfs_stack.push(start_coords),
-                        Tile::Empty => board_edge.push(start_coords),
-                        _ => {}
-                    }
-                    while let Some(coords) = dfs_stack.pop() {
-                        for (neighbor_coords, neighbor) in self.iter_neighbors(coords) {
-                            let (r, q) = neighbor_coords;
-                            let is_in_array = r < self.num_rows() && q < self.row_length;
-                            if is_in_array && !is_visited(&visited, neighbor_coords) {
-                                set_visited(&mut visited, neighbor_coords);
-                                match neighbor {
-                                    Tile::NoTile => dfs_stack.push(neighbor_coords),
-                                    Tile::Empty => board_edge.push(neighbor_coords),
-                                    _ => {}
-                                }
-                            }
-                        }
-                    }
-                }
+        /* We know that the first board tile we encounter must be on the outer edge. */
+        let (start_coords, start) = self
+            .iter_row_major()
+            .find(|&(_, tile)| tile != Tile::NoTile)
+            .expect("The board is empty");
+
+        /* The first board tile we encountered must be on the left edge of the board, so its left
+         * side (offset (0, -1)) is a safe direction to start iterating neighbors. */
+        let mut previous_coords = (start_coords.0, start_coords.1.wrapping_sub(1));
+        let mut coords = start_coords;
+
+        /* Iterate along the outer edge of the board. */
+        loop {
+            /* Search through the neighbors of coords in clockwise direction starting from
+             * previous_coords. Find the first board tile. We know that board tile is also on the
+             * outer edge. */
+            let (next_coords, next) = self
+                .iter_neighbors(coords)
+                .chain(self.iter_neighbors(coords))
+                .skip_while(|&(neighbor_coords, _)| neighbor_coords != previous_coords)
+                .skip(1)
+                .find(|&(_, neighbor)| neighbor != Tile::NoTile)
+                .unwrap_or((start_coords, start));
+
+            if next == Tile::Empty {
+                board_edge.push(next_coords);
             }
+
+            /* We have come a full circle. */
+            if next_coords == start_coords {
+                break;
+            }
+
+            previous_coords = coords;
+            coords = next_coords;
         }
 
         return board_edge.into_iter().map(move |coords| {
