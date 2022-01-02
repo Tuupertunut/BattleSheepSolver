@@ -119,6 +119,10 @@ impl Board {
             })
             .collect::<Vec<String>>();
 
+        if row_strings.is_empty() {
+            return Err("Empty board")?;
+        }
+
         /* Column index of first board character in any row. */
         let string_begin_index = row_strings
             .iter()

@@ -60,7 +60,10 @@ fn main() {
                 } else {
                     println!("Draw!")
                 }
-                println!("(average turn took {:?})", total_duration / turns);
+                println!(
+                    "(average turn took {:?})",
+                    total_duration.checked_div(turns).unwrap_or(Duration::ZERO)
+                );
 
                 break;
             }

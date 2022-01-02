@@ -20,6 +20,11 @@ fn parse_fails_on_invalid_board() {
 }
 
 #[test]
+fn parse_fails_on_empty_board() {
+    assert!(Board::parse("").is_err());
+}
+
+#[test]
 fn possible_moves_are_found() {
     let input = "
    0  +2
