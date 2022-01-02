@@ -8,6 +8,13 @@ The program is written in Rust.
 
 The UI is a command line UI. User enters boards in a text format described in the user guide. These board strings can be parsed into a 2d array data structure called `Board` with `Board.parse` and a Board can be written back into string with `Board.write`.
 
+## Board
+
+![](hexsquare.png)
+The hexagonal board is stored in a 2d array as a square grid as shown in the image. The data structure is stored in a `Board`. The elements of the array are `Tile`s. A `Tile` may either be a `Stack` of certain player and certain size, `Empty`, or `NoTile`. `NoTile` means that that element of the 2d array is not part of the board.
+
+Straight lines of a hexagonal grid can be traversed by increasing (or decreasing) the first, second or both indexes at the same time.
+
 ## Minimax
 
 This program uses the minimax algorithm for selecting the best move. The search tree is too large to be traversed completely, so it is limited to a depth of 7 turns, where heuristic evaluation is used instead.
@@ -22,7 +29,9 @@ Instead of traversing the move tree in a random order, the moves at every level 
 
 ### Parallelization
 
-The top level of the minimax tree is searched in parallel. Instead of evaluating the tree branches one by one, an evaluation job is spawned for each branch and sent to a thread pool for execution. The top level usually has around 40 child branches on the first few turns, so there should be enough jobs for all cores in a modern multicore processor. Deeper levels of the tree do not need to be parallelized.
+The top level of the minimax tree is searched in parallel. Instead of evaluating the tree branches one by one, an evaluation job is spawned for each branch and sent to a thread pool for execution. The top level usually has around 60 child branches on the first few turns, so there should be enough jobs for all cores in a modern multicore processor. Deeper levels of the tree do not need to be parallelized.
+
+The parallelization uses the [Young Brothers Wait Concept](https://www.chessprogramming.org/Young_Brothers_Wait_Concept) optimization, meaning that the first tree branch is first fully evaluated in a single thread before starting the thread pool.
 
 ### Depth
 
@@ -35,13 +44,6 @@ The tree level 7 (root) is evaluated in parallel with multiple threads.
 ### Failed optimizations
 
 Iterative deepening search and transposition tables are known minimax optimizations in the chess world. They were tried, but they did not improve the performance of this program.
-
-## Board
-
-![](hexsquare.png)
-The hexagonal board is stored in a 2d array as a square grid as shown in the image. The data structure is stored in a `Board`. The elements of the array are `Tile`s. A `Tile` may either be a `Stack` of certain player and certain size, `Empty`, or `NoTile`. `NoTile` means that that element of the 2d array is not part of the board.
-
-Straight lines of a hexagonal grid can be traversed by increasing (or decreasing) the first, second or both indexes at the same time.
 
 ## Heuristic evaluation
 
@@ -56,3 +58,7 @@ The heuristic score is the difference in scores of the two players. Negative sco
 ### Endgame evaluation
 
 If the heuristic evaluation function determines that one player has won for certain, it returns 1000000 (one million) or -1000000.
+
+## Move generation
+
+Possible moves are generated in functions `Board::possible_regular_moves` and `Board::possible_starting_moves`. The functions return an iterator of next turn boards. Each new board represents a game state where one possible move has been made. Each board (move) is generated lazily in the iterator only when some code calls `Iterator::next`.
