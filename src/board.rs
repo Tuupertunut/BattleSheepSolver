@@ -1,7 +1,10 @@
 use either::Either;
-use std::error::Error;
-use std::iter;
-use std::ops::{Index, IndexMut};
+use next_gen::prelude::*;
+use std::{
+    error::Error,
+    iter,
+    ops::{Index, IndexMut},
+};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum Player {
@@ -253,102 +256,103 @@ impl Board {
 
     /* Iterates through regular moves where player splits a stack and moves it. */
     fn possible_regular_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
-        /* Iterate through all tiles. */
-        return self
-            .iter_row_major()
-            /* Check if the tile is a splittable stack of this player. */
-            .filter_map(move |(orig_coords, tile)| match tile {
-                Tile::Stack(p, size) if p == player && size > 1 => Some((orig_coords, size)),
-                _ => None,
-            })
-            .flat_map(move |(orig_coords, stack_size)| {
-                /* Iterate through all straight line directions. */
-                return NEIGHBOR_OFFSETS
-                    .iter()
-                    /* Move to a direction as far as there are empty tiles. */
-                    .map(move |&dir_offset| {
-                        let mut coords = orig_coords;
-                        loop {
-                            /* Coordinates for the next tile in the direction.
-                             * Hack: negative numbers cannot be added to a usize, so they are
-                             * converted into usize with underflow and then added with overflow.
-                             * Same as: let next_coords = coords + dir_offset */
-                            let next_coords = (
-                                coords.0.wrapping_add(dir_offset.0 as usize),
-                                coords.1.wrapping_add(dir_offset.1 as usize),
-                            );
+        #[generator(Board)]
+        fn generate_moves(board: &Board, player: Player) {
+            /* Iterate through all tiles. */
+            for (orig_coords, tile) in board.iter_row_major() {
+                /* Check if the tile is a splittable stack of this player. */
+                if let Tile::Stack(p, stack_size) = tile {
+                    if p == player && stack_size > 1 {
+                        /* Iterate through all straight line directions. */
+                        for dir_offset in NEIGHBOR_OFFSETS {
+                            /* Move to a direction as far as there are empty tiles. */
+                            let mut coords = orig_coords;
+                            loop {
+                                /* Coordinates for the next tile in the direction.
+                                 * Hack: negative numbers cannot be added to a usize, so they are
+                                 * converted into usize with underflow and then added with overflow.
+                                 * Same as: let next_coords = coords + dir_offset */
+                                let next_coords = (
+                                    coords.0.wrapping_add(dir_offset.0 as usize),
+                                    coords.1.wrapping_add(dir_offset.1 as usize),
+                                );
 
-                            /* If next tile is empty, move to that tile. */
-                            if self[next_coords] == Tile::Empty {
-                                coords = next_coords;
-                            } else {
-                                break;
+                                /* If next tile is empty, move to that tile. */
+                                if board[next_coords] == Tile::Empty {
+                                    coords = next_coords;
+                                } else {
+                                    break;
+                                }
+                            }
+                            /* Check if we actually found any empty tiles in the direction. */
+                            if coords != orig_coords {
+                                /* Iterate through all the ways to split the stack. */
+                                for split in 1..stack_size {
+                                    let mut next_board = board.clone();
+                                    next_board[coords] = Tile::Stack(player, split);
+                                    next_board[orig_coords] =
+                                        Tile::Stack(player, stack_size - split);
+
+                                    yield_!(next_board);
+                                }
                             }
                         }
-                        return coords;
-                    })
-                    /* Check if we actually found any empty tiles in the direction. */
-                    .filter(move |&coords| coords != orig_coords)
-                    .flat_map(move |coords| {
-                        /* Iterate through all the ways to split the stack. */
-                        return (1..stack_size).map(move |split| {
-                            /* Create the next board. */
-                            let mut next_board = self.clone();
-                            next_board[coords] = Tile::Stack(player, split);
-                            next_board[orig_coords] = Tile::Stack(player, stack_size - split);
-                            return next_board;
-                        });
-                    });
-            });
+                    }
+                }
+            }
+        }
+
+        mk_gen!(let generator = box generate_moves(self, player));
+        return generator.into_iter();
     }
 
     /* Iterates through starting moves where player places a stack on the outer edge. */
     fn possible_starting_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
-        let mut board_edge = Vec::<(usize, usize)>::new();
+        #[generator(Board)]
+        fn generate_moves(board: &Board, player: Player) {
+            /* We know that the first board tile we encounter must be on the outer edge. */
+            let (start_coords, start) = board
+                .iter_row_major()
+                .find(|&(_, tile)| tile != Tile::NoTile)
+                .expect("The board is empty");
 
-        /* We know that the first board tile we encounter must be on the outer edge. */
-        let (start_coords, start) = self
-            .iter_row_major()
-            .find(|&(_, tile)| tile != Tile::NoTile)
-            .expect("The board is empty");
+            /* The first board tile we encountered must be on the left edge of the board, so its
+             * left side (offset (0, -1)) is a safe direction to start iterating neighbors. */
+            let mut previous_coords = (start_coords.0, start_coords.1.wrapping_sub(1));
+            let mut coords = start_coords;
 
-        /* The first board tile we encountered must be on the left edge of the board, so its left
-         * side (offset (0, -1)) is a safe direction to start iterating neighbors. */
-        let mut previous_coords = (start_coords.0, start_coords.1.wrapping_sub(1));
-        let mut coords = start_coords;
+            /* Iterate along the outer edge of the board. */
+            loop {
+                /* Search through the neighbors of coords in clockwise direction starting from
+                 * previous_coords. Find the first board tile. We know that board tile is also on
+                 * the outer edge. */
+                let (next_coords, next) = board
+                    .iter_neighbors(coords)
+                    .chain(board.iter_neighbors(coords))
+                    .skip_while(|&(neighbor_coords, _)| neighbor_coords != previous_coords)
+                    .skip(1)
+                    .find(|&(_, neighbor)| neighbor != Tile::NoTile)
+                    .unwrap_or((start_coords, start));
 
-        /* Iterate along the outer edge of the board. */
-        loop {
-            /* Search through the neighbors of coords in clockwise direction starting from
-             * previous_coords. Find the first board tile. We know that board tile is also on the
-             * outer edge. */
-            let (next_coords, next) = self
-                .iter_neighbors(coords)
-                .chain(self.iter_neighbors(coords))
-                .skip_while(|&(neighbor_coords, _)| neighbor_coords != previous_coords)
-                .skip(1)
-                .find(|&(_, neighbor)| neighbor != Tile::NoTile)
-                .unwrap_or((start_coords, start));
+                if next == Tile::Empty {
+                    let mut next_board = board.clone();
+                    next_board[next_coords] = Tile::Stack(player, 16);
 
-            if next == Tile::Empty {
-                board_edge.push(next_coords);
+                    yield_!(next_board);
+                }
+
+                /* We have come a full circle. */
+                if next_coords == start_coords {
+                    break;
+                }
+
+                previous_coords = coords;
+                coords = next_coords;
             }
-
-            /* We have come a full circle. */
-            if next_coords == start_coords {
-                break;
-            }
-
-            previous_coords = coords;
-            coords = next_coords;
         }
 
-        return board_edge.into_iter().map(move |coords| {
-            /* Create the next board. */
-            let mut next_board = self.clone();
-            next_board[coords] = Tile::Stack(player, 16);
-            return next_board;
-        });
+        mk_gen!(let generator = box generate_moves(self, player));
+        return generator.into_iter();
     }
 
     /* Evaluates the current board state. Positive number means Max has an advantage, negative means

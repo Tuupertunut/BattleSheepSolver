@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 rayon = "1.5.1"
 either = "1.6.1"
+next-gen = "0.0.10"
