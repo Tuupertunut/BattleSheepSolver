@@ -29,10 +29,78 @@ impl Player {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub enum Tile {
+pub enum TileType {
     NoTile, /* outside of the board */
     Empty,
-    Stack(Player, u8),
+    Stack,
+}
+
+/* Custom bitfield struct for saving a Battle Sheep tile into a single byte.
+ * Structure:
+ * 2 bits tile_type, 00 = Stack, 01 = NoTile, 10 or 11 = Empty
+ * 1 bits player, 0 = Min, 1 = Max
+ * 5 bits stack_size
+ * Numerically:
+ * 0-31 = Min player's Stack with size 0-31
+ * 32-63 = Max player's Stack with size 0-31
+ * 64-127 = NoTile
+ * 128-255 = Empty */
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+pub struct Tile(u8);
+
+impl Tile {
+    pub const MAX_STACK_SIZE: u8 = 31;
+
+    pub const NO_TILE: Self = Self::new(TileType::NoTile, Player::Min, 0);
+    pub const EMPTY: Self = Self::new(TileType::Empty, Player::Min, 0);
+
+    pub const fn new(tile_type: TileType, player: Player, stack_size: u8) -> Self {
+        let bitfield = stack_size
+            + match player {
+                Player::Min => 0,
+                Player::Max => 32,
+            }
+            + match tile_type {
+                TileType::Stack => 0,
+                TileType::NoTile => 64,
+                TileType::Empty => 128,
+            };
+        return Self(bitfield);
+    }
+
+    pub fn tile_type(self) -> TileType {
+        if self.0 < 64 {
+            return TileType::Stack;
+        } else if self.0 < 128 {
+            return TileType::NoTile;
+        } else {
+            return TileType::Empty;
+        }
+    }
+
+    pub fn player(self) -> Player {
+        if self.0 < 32 {
+            return Player::Min;
+        } else {
+            return Player::Max;
+        }
+    }
+
+    pub fn stack_size(self) -> u8 {
+        return self.0 % 32;
+    }
+
+    pub fn is_stack(self) -> bool {
+        return self.0 < 64;
+    }
+
+    pub fn is_empty(self) -> bool {
+        return self.0 >= 128;
+    }
+
+    pub fn is_board_tile(self) -> bool {
+        return self.is_stack() || self.is_empty();
+    }
 }
 
 /* Coordinate offsets for each neighbor in a hex grid. Neighbors can be found by adding these to our
@@ -57,7 +125,7 @@ impl Index<(usize, usize)> for Board {
         if r < self.num_rows() && q < self.row_length {
             return &self.tiles[self.row_length * r + q];
         } else {
-            return &Tile::NoTile;
+            return &Tile::NO_TILE;
         }
     }
 }
@@ -163,15 +231,21 @@ impl Board {
                 let tile_content = tile_string.trim_end();
 
                 if tile_content == "" {
-                    tiles.push(Tile::NoTile);
+                    tiles.push(Tile::NO_TILE);
                 } else if tile_content == " 0" {
-                    tiles.push(Tile::Empty);
+                    tiles.push(Tile::EMPTY);
                 } else if tile_content.starts_with("+") {
                     let stack_size = tile_content[1..].parse::<u8>()?;
-                    tiles.push(Tile::Stack(Player::Max, stack_size));
+                    if stack_size > Tile::MAX_STACK_SIZE {
+                        return Err(format!("Stack size over {}", Tile::MAX_STACK_SIZE))?;
+                    }
+                    tiles.push(Tile::new(TileType::Stack, Player::Max, stack_size));
                 } else if tile_content.starts_with("-") {
                     let stack_size = tile_content[1..].parse::<u8>()?;
-                    tiles.push(Tile::Stack(Player::Min, stack_size));
+                    if stack_size > Tile::MAX_STACK_SIZE {
+                        return Err(format!("Stack size over {}", Tile::MAX_STACK_SIZE))?;
+                    }
+                    tiles.push(Tile::new(TileType::Stack, Player::Min, stack_size));
                 } else {
                     return Err("Invalid tile")?;
                 }
@@ -202,23 +276,28 @@ impl Board {
             row_string.push_str(&row_indent);
 
             for &tile in row {
+                let tile = (tile.tile_type(), tile.player(), tile.stack_size());
                 let tile_string = if colored {
                     match tile {
-                        Tile::NoTile => format!("    "),
-                        Tile::Empty => format!("{} 0  {}", GREEN, RESET),
-                        Tile::Stack(Player::Max, stack_size) => {
+                        (TileType::NoTile, _, _) => format!("    "),
+                        (TileType::Empty, _, _) => format!("{} 0  {}", GREEN, RESET),
+                        (TileType::Stack, Player::Max, stack_size) => {
                             format!("{}+{:<3}{}", BLUE, stack_size, RESET)
                         }
-                        Tile::Stack(Player::Min, stack_size) => {
+                        (TileType::Stack, Player::Min, stack_size) => {
                             format!("{}-{:<3}{}", RED, stack_size, RESET)
                         }
                     }
                 } else {
                     match tile {
-                        Tile::NoTile => format!("    "),
-                        Tile::Empty => format!(" 0  "),
-                        Tile::Stack(Player::Max, stack_size) => format!("+{:<3}", stack_size),
-                        Tile::Stack(Player::Min, stack_size) => format!("-{:<3}", stack_size),
+                        (TileType::NoTile, _, _) => format!("    "),
+                        (TileType::Empty, _, _) => format!(" 0  "),
+                        (TileType::Stack, Player::Max, stack_size) => {
+                            format!("+{:<3}", stack_size)
+                        }
+                        (TileType::Stack, Player::Min, stack_size) => {
+                            format!("-{:<3}", stack_size)
+                        }
                     }
                 };
                 row_string.push_str(&tile_string);
@@ -249,7 +328,7 @@ impl Board {
     pub fn possible_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
         let player_has_stacks = self
             .iter_row_major()
-            .any(|(_, tile)| matches!(tile, Tile::Stack(p, _) if p == player));
+            .any(|(_, tile)| tile.is_stack() && tile.player() == player);
 
         if player_has_stacks {
             return Either::Right(self.possible_regular_moves(player));
@@ -265,8 +344,9 @@ impl Board {
             /* Iterate through all tiles. */
             for (orig_coords, tile) in board.iter_row_major() {
                 /* Check if the tile is a splittable stack of this player. */
-                if let Tile::Stack(p, stack_size) = tile {
-                    if p == player && stack_size > 1 {
+                if tile.is_stack() && tile.player() == player {
+                    let stack_size = tile.stack_size();
+                    if stack_size > 1 {
                         /* Iterate through all straight line directions. */
                         for dir_offset in NEIGHBOR_OFFSETS {
                             /* Move to a direction as far as there are empty tiles. */
@@ -282,7 +362,7 @@ impl Board {
                                 );
 
                                 /* If next tile is empty, move to that tile. */
-                                if board[next_coords] == Tile::Empty {
+                                if board[next_coords].is_empty() {
                                     coords = next_coords;
                                 } else {
                                     break;
@@ -293,9 +373,9 @@ impl Board {
                                 /* Iterate through all the ways to split the stack. */
                                 for split in 1..stack_size {
                                     let mut next_board = board.clone();
-                                    next_board[coords] = Tile::Stack(player, split);
+                                    next_board[coords] = Tile::new(TileType::Stack, player, split);
                                     next_board[orig_coords] =
-                                        Tile::Stack(player, stack_size - split);
+                                        Tile::new(TileType::Stack, player, stack_size - split);
 
                                     yield_!(next_board);
                                 }
@@ -317,7 +397,7 @@ impl Board {
             /* We know that the first board tile we encounter must be on the outer edge. */
             let (start_coords, start) = board
                 .iter_row_major()
-                .find(|&(_, tile)| tile != Tile::NoTile)
+                .find(|&(_, tile)| tile.is_board_tile())
                 .expect("The board is empty");
 
             /* The first board tile we encountered must be on the left edge of the board, so its
@@ -335,12 +415,12 @@ impl Board {
                     .chain(board.iter_neighbors(coords))
                     .skip_while(|&(neighbor_coords, _)| neighbor_coords != previous_coords)
                     .skip(1)
-                    .find(|&(_, neighbor)| neighbor != Tile::NoTile)
+                    .find(|&(_, neighbor)| neighbor.is_board_tile())
                     .unwrap_or((start_coords, start));
 
-                if next == Tile::Empty {
+                if next.is_empty() {
                     let mut next_board = board.clone();
-                    next_board[next_coords] = Tile::Stack(player, 16);
+                    next_board[next_coords] = Tile::new(TileType::Stack, player, 16);
 
                     yield_!(next_board);
                 }
@@ -375,11 +455,14 @@ impl Board {
         let mut min_smallest_stack = i32::MAX;
 
         for (coords, tile) in self.iter_row_major() {
-            if let Tile::Stack(player, size) = tile {
+            if tile.is_stack() {
+                let player = tile.player();
+                let size = tile.stack_size();
+
                 /* A maximum of 6 directions are blocked. */
                 let mut blocked_directions = 6;
                 for (_, neighbor) in self.iter_neighbors(coords) {
-                    if neighbor == Tile::Empty {
+                    if neighbor.is_empty() {
                         blocked_directions -= 1;
                     }
                 }
@@ -475,35 +558,33 @@ impl Board {
         let mut dfs_stack = Vec::<(usize, usize)>::new();
 
         for (start_coords, tile) in self.iter_row_major() {
-            if let Tile::Stack(player, _) = tile {
-                if !is_visited(&visited, start_coords) {
-                    let mut field_size = 0;
+            if tile.is_stack() && !is_visited(&visited, start_coords) {
+                let player = tile.player();
+                let mut field_size = 0;
 
-                    /* Depth-first search for counting the size of a connected field. */
-                    set_visited(&mut visited, start_coords);
-                    dfs_stack.push(start_coords);
-                    while let Some(coords) = dfs_stack.pop() {
-                        field_size += 1;
+                /* Depth-first search for counting the size of a connected field. */
+                set_visited(&mut visited, start_coords);
+                dfs_stack.push(start_coords);
+                while let Some(coords) = dfs_stack.pop() {
+                    field_size += 1;
 
-                        for (neighbor_coords, neighbor) in self.iter_neighbors(coords) {
-                            if let Tile::Stack(neighbor_player, _) = neighbor {
-                                if neighbor_player == player
-                                    && !is_visited(&visited, neighbor_coords)
-                                {
-                                    set_visited(&mut visited, neighbor_coords);
-                                    dfs_stack.push(neighbor_coords);
-                                }
-                            }
+                    for (neighbor_coords, neighbor) in self.iter_neighbors(coords) {
+                        if neighbor.is_stack()
+                            && neighbor.player() == player
+                            && !is_visited(&visited, neighbor_coords)
+                        {
+                            set_visited(&mut visited, neighbor_coords);
+                            dfs_stack.push(neighbor_coords);
                         }
                     }
+                }
 
-                    match player {
-                        Player::Min => {
-                            min_largest_field = u32::max(min_largest_field, field_size);
-                        }
-                        Player::Max => {
-                            max_largest_field = u32::max(max_largest_field, field_size);
-                        }
+                match player {
+                    Player::Min => {
+                        min_largest_field = u32::max(min_largest_field, field_size);
+                    }
+                    Player::Max => {
+                        max_largest_field = u32::max(max_largest_field, field_size);
                     }
                 }
             }
