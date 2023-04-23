@@ -234,20 +234,19 @@ impl Board {
                     tiles.push(Tile::NO_TILE);
                 } else if tile_content == " 0" {
                     tiles.push(Tile::EMPTY);
-                } else if tile_content.starts_with("+") {
-                    let stack_size = tile_content[1..].parse::<u8>()?;
-                    if stack_size > Tile::MAX_STACK_SIZE {
-                        return Err(format!("Stack size over {}", Tile::MAX_STACK_SIZE))?;
-                    }
-                    tiles.push(Tile::new(TileType::Stack, Player::Max, stack_size));
-                } else if tile_content.starts_with("-") {
-                    let stack_size = tile_content[1..].parse::<u8>()?;
-                    if stack_size > Tile::MAX_STACK_SIZE {
-                        return Err(format!("Stack size over {}", Tile::MAX_STACK_SIZE))?;
-                    }
-                    tiles.push(Tile::new(TileType::Stack, Player::Min, stack_size));
                 } else {
-                    return Err("Invalid tile")?;
+                    let player = match &tile_content[..1] {
+                        "-" => Player::Min,
+                        "+" => Player::Max,
+                        _ => return Err("Invalid tile")?,
+                    };
+
+                    let stack_size = tile_content[1..].parse::<u8>()?;
+                    if stack_size > Tile::MAX_STACK_SIZE {
+                        return Err(format!("Stack size over {}", Tile::MAX_STACK_SIZE))?;
+                    }
+
+                    tiles.push(Tile::new(TileType::Stack, player, stack_size));
                 }
             }
         }
@@ -276,27 +275,24 @@ impl Board {
             row_string.push_str(&row_indent);
 
             for &tile in row {
-                let tile = (tile.tile_type(), tile.player(), tile.stack_size());
-                let tile_string = if colored {
-                    match tile {
-                        (TileType::NoTile, _, _) => format!("    "),
-                        (TileType::Empty, _, _) => format!("{} 0  {}", GREEN, RESET),
-                        (TileType::Stack, Player::Max, stack_size) => {
-                            format!("{}+{:<3}{}", BLUE, stack_size, RESET)
-                        }
-                        (TileType::Stack, Player::Min, stack_size) => {
-                            format!("{}-{:<3}{}", RED, stack_size, RESET)
+                let tile_string = match tile.tile_type() {
+                    TileType::NoTile => format!("    "),
+                    TileType::Empty => {
+                        if colored {
+                            format!("{} 0  {}", GREEN, RESET)
+                        } else {
+                            format!(" 0  ")
                         }
                     }
-                } else {
-                    match tile {
-                        (TileType::NoTile, _, _) => format!("    "),
-                        (TileType::Empty, _, _) => format!(" 0  "),
-                        (TileType::Stack, Player::Max, stack_size) => {
-                            format!("+{:<3}", stack_size)
-                        }
-                        (TileType::Stack, Player::Min, stack_size) => {
-                            format!("-{:<3}", stack_size)
+                    TileType::Stack => {
+                        let (symbol, color) = match tile.player() {
+                            Player::Min => ("-", RED),
+                            Player::Max => ("+", BLUE),
+                        };
+                        if colored {
+                            format!("{}{}{:<3}{}", color, symbol, tile.stack_size(), RESET)
+                        } else {
+                            format!("{}{:<3}", symbol, tile.stack_size())
                         }
                     }
                 };
