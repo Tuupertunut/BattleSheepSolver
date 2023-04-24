@@ -39,23 +39,23 @@ pub enum TileType {
  * Structure:
  * 2 bits tile_type, 00 = Stack, 01 = NoTile, 10 or 11 = Empty
  * 1 bits player, 0 = Min, 1 = Max
- * 5 bits stack_size
+ * 5 bits stack_size, offset by -1
  * Numerically:
- * 0-31 = Min player's Stack with size 0-31
- * 32-63 = Max player's Stack with size 0-31
+ * 0-31 = Min player's Stack with size 1-32
+ * 32-63 = Max player's Stack with size 1-32
  * 64-127 = NoTile
  * 128-255 = Empty */
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub struct Tile(u8);
 
 impl Tile {
-    pub const MAX_STACK_SIZE: u8 = 31;
+    pub const MAX_STACK_SIZE: u8 = 32;
 
-    pub const NO_TILE: Self = Self::new(TileType::NoTile, Player::Min, 0);
-    pub const EMPTY: Self = Self::new(TileType::Empty, Player::Min, 0);
+    pub const NO_TILE: Self = Self::new(TileType::NoTile, Player::Min, 1);
+    pub const EMPTY: Self = Self::new(TileType::Empty, Player::Min, 1);
 
     pub const fn new(tile_type: TileType, player: Player, stack_size: u8) -> Self {
-        let bitfield = stack_size
+        let bitfield = stack_size - 1
             + match player {
                 Player::Min => 0,
                 Player::Max => 32,
@@ -87,7 +87,7 @@ impl Tile {
     }
 
     pub fn stack_size(self) -> u8 {
-        return self.0 % 32;
+        return self.0 % 32 + 1;
     }
 
     pub fn is_stack(self) -> bool {
@@ -244,6 +244,8 @@ impl Board {
                     let stack_size = tile_content[1..].parse::<u8>()?;
                     if stack_size > Tile::MAX_STACK_SIZE {
                         return Err(format!("Stack size over {}", Tile::MAX_STACK_SIZE))?;
+                    } else if stack_size == 0 {
+                        return Err("Stack size is 0")?;
                     }
 
                     tiles.push(Tile::new(TileType::Stack, player, stack_size));
