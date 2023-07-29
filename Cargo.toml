@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 rayon = "1.7.0"
-either = "1.8.1"
+either = "1.9.0"
 next-gen = "0.0.10"
