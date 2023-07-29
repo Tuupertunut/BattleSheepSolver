@@ -108,6 +108,10 @@ impl Tile {
 pub const NEIGHBOR_OFFSETS: [(isize, isize); 6] =
     [(0, 1), (1, 1), (1, 0), (0, -1), (-1, -1), (-1, 0)];
 
+pub fn add_offset((r, q): (isize, isize), (off_r, off_q): (isize, isize)) -> (isize, isize) {
+    return (r + off_r, q + off_q);
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct Board {
     /* Tiles stored in row-major order. */
@@ -118,13 +122,11 @@ pub struct Board {
 impl Index<(isize, isize)> for Board {
     type Output = Tile;
 
-    fn index(&self, (r, q): (isize, isize)) -> &Self::Output {
-        let (r, q) = (r as usize, q as usize);
-        /* r = row coordinate, q = column coordinate
-         * Return the tile for all valid coords in the board, but also return NoTile for all coords
+    fn index(&self, coords: (isize, isize)) -> &Self::Output {
+        /* Return the tile for all valid coords in the board, but also return NoTile for all coords
          * outside the board. This way the indexing operation never panics. */
-        if r < self.num_rows() && q < self.row_length {
-            return &self.tiles[self.row_length * r + q];
+        if self.coords_in_range(coords) {
+            return &self.tiles[self.coords_to_index(coords)];
         } else {
             return &Tile::NO_TILE;
         }
@@ -132,9 +134,9 @@ impl Index<(isize, isize)> for Board {
 }
 
 impl IndexMut<(isize, isize)> for Board {
-    fn index_mut(&mut self, (r, q): (isize, isize)) -> &mut Self::Output {
-        let (r, q) = (r as usize, q as usize);
-        return &mut self.tiles[self.row_length * r + q];
+    fn index_mut(&mut self, coords: (isize, isize)) -> &mut Self::Output {
+        let index = self.coords_to_index(coords);
+        return &mut self.tiles[index];
     }
 }
 
@@ -143,17 +145,31 @@ impl Board {
         return self.tiles.len() / self.row_length;
     }
 
+    pub fn coords_to_index(&self, (r, q): (isize, isize)) -> usize {
+        /* r = row coordinate, q = column coordinate */
+        let (r, q) = (r as usize, q as usize);
+        return self.row_length * r + q;
+    }
+
+    pub fn index_to_coords(&self, index: usize) -> (isize, isize) {
+        return (
+            (index / self.row_length) as isize,
+            (index % self.row_length) as isize,
+        );
+    }
+
+    pub fn coords_in_range(&self, (r, q): (isize, isize)) -> bool {
+        let (r, q) = (r as usize, q as usize);
+        return r < self.num_rows() && q < self.row_length;
+    }
+
     /* Iterates through all tiles in row-major order. */
     pub fn iter_row_major(&self) -> impl Iterator<Item = ((isize, isize), Tile)> + '_ {
-        return self.tiles.iter().enumerate().map(|(index, &tile)| {
-            (
-                (
-                    (index / self.row_length) as isize,
-                    (index % self.row_length) as isize,
-                ),
-                tile,
-            )
-        });
+        return self
+            .tiles
+            .iter()
+            .enumerate()
+            .map(|(index, &tile)| (self.index_to_coords(index), tile));
     }
 
     pub fn iter_rows(&self) -> impl Iterator<Item = (usize, &[Tile])> {
@@ -163,10 +179,10 @@ impl Board {
     /* Iterates through all neighbors of the given coordinates in clockwise direction. */
     pub fn iter_neighbors(
         &self,
-        (r, q): (isize, isize),
+        coords: (isize, isize),
     ) -> impl Iterator<Item = ((isize, isize), Tile)> + '_ {
-        return NEIGHBOR_OFFSETS.iter().map(move |&(offset_r, offset_q)| {
-            let neighbor_coords = (r + offset_r, q + offset_q);
+        return NEIGHBOR_OFFSETS.iter().map(move |&offset| {
+            let neighbor_coords = add_offset(coords, offset);
             return (neighbor_coords, self[neighbor_coords]);
         });
     }
@@ -346,14 +362,12 @@ impl Board {
                     let stack_size = tile.stack_size();
                     if stack_size > 1 {
                         /* Iterate through all straight line directions. */
-                        for (dir_offset_r, dir_offset_q) in NEIGHBOR_OFFSETS {
+                        for dir_offset in NEIGHBOR_OFFSETS {
                             /* Move to a direction as far as there are empty tiles. */
                             let mut coords = orig_coords;
                             loop {
-                                let (r, q) = coords;
-
                                 /* Coordinates for the next tile in the direction. */
-                                let next_coords = (r + dir_offset_r, q + dir_offset_q);
+                                let next_coords = add_offset(coords, dir_offset);
 
                                 /* If next tile is empty, move to that tile. */
                                 if board[next_coords].is_empty() {
@@ -396,13 +410,13 @@ impl Board {
 
             /* The first board tile we encountered must be on the left edge of the board, so its
              * left side (offset (0, -1)) is a safe direction to start iterating neighbors. */
-            let mut previous_coords = (start_coords.0, start_coords.1.wrapping_sub(1));
+            let mut previous_coords = add_offset(start_coords, (0, -1));
             let mut coords = start_coords;
 
             /* Iterate along the outer edge of the board. */
             loop {
                 /* Search through the neighbors of coords in clockwise direction starting from
-                 * previous_coords. Find the first board tile. We know that board tile is also on
+                 * previous_coords. Find the first board tile. That board tile must also be on
                  * the outer edge. */
                 let (next_coords, next) = board
                     .iter_neighbors(coords)
@@ -544,26 +558,16 @@ impl Board {
         let mut min_largest_field = 0;
         let mut max_largest_field = 0;
 
-        /* Helper functions for using the visited array. */
-        let is_visited = |visited: &Vec<bool>, (r, q)| {
-            let (r, q) = (r as usize, q as usize);
-            return visited[self.row_length * r + q];
-        };
-        let set_visited = |visited: &mut Vec<bool>, (r, q)| {
-            let (r, q) = (r as usize, q as usize);
-            visited[self.row_length * r + q] = true;
-        };
-
         let mut visited = vec![false; self.tiles.len()];
         let mut dfs_stack = Vec::<(isize, isize)>::new();
 
         for (start_coords, tile) in self.iter_row_major() {
-            if tile.is_stack() && !is_visited(&visited, start_coords) {
+            if tile.is_stack() && !visited[self.coords_to_index(start_coords)] {
                 let player = tile.player();
                 let mut field_size = 0;
 
                 /* Depth-first search for counting the size of a connected field. */
-                set_visited(&mut visited, start_coords);
+                visited[self.coords_to_index(start_coords)] = true;
                 dfs_stack.push(start_coords);
                 while let Some(coords) = dfs_stack.pop() {
                     field_size += 1;
@@ -571,9 +575,9 @@ impl Board {
                     for (neighbor_coords, neighbor) in self.iter_neighbors(coords) {
                         if neighbor.is_stack()
                             && neighbor.player() == player
-                            && !is_visited(&visited, neighbor_coords)
+                            && !visited[self.coords_to_index(neighbor_coords)]
                         {
-                            set_visited(&mut visited, neighbor_coords);
+                            visited[self.coords_to_index(neighbor_coords)] = true;
                             dfs_stack.push(neighbor_coords);
                         }
                     }
