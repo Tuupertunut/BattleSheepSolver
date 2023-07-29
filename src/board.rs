@@ -292,7 +292,7 @@ impl Board {
             let row_indent = iter::repeat(' ').take(indentation).collect::<String>();
             row_string.push_str(&row_indent);
 
-            for &tile in row {
+            for &tile in row.iter() {
                 let tile_string = match tile.tile_type() {
                     TileType::NoTile => format!("    "),
                     TileType::Empty => {
@@ -362,7 +362,7 @@ impl Board {
                     let stack_size = tile.stack_size();
                     if stack_size > 1 {
                         /* Iterate through all straight line directions. */
-                        for dir_offset in NEIGHBOR_OFFSETS {
+                        for &dir_offset in NEIGHBOR_OFFSETS.iter() {
                             /* Move to a direction as far as there are empty tiles. */
                             let mut coords = orig_coords;
                             loop {
