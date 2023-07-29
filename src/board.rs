@@ -105,7 +105,7 @@ impl Tile {
 
 /* Coordinate offsets for each neighbor in a hex grid. Neighbors can be found by adding these to our
  * current coordinates. These also represent straight line directions. */
-pub const NEIGHBOR_OFFSETS: [(isize, isize); 6] =
+pub const DIRECTION_OFFSETS: [(isize, isize); 6] =
     [(0, 1), (1, 1), (1, 0), (0, -1), (-1, -1), (-1, 0)];
 
 pub fn add_offset((r, q): (isize, isize), (off_r, off_q): (isize, isize)) -> (isize, isize) {
@@ -181,10 +181,26 @@ impl Board {
         &self,
         coords: (isize, isize),
     ) -> impl Iterator<Item = ((isize, isize), Tile)> + '_ {
-        return NEIGHBOR_OFFSETS.iter().map(move |&offset| {
+        return DIRECTION_OFFSETS.iter().map(move |&offset| {
             let neighbor_coords = add_offset(coords, offset);
             return (neighbor_coords, self[neighbor_coords]);
         });
+    }
+
+    pub fn iter_empty_straight_line(
+        &self,
+        start_coords: (isize, isize),
+        direction: (isize, isize),
+    ) -> impl Iterator<Item = (isize, isize)> + '_ {
+        return iter::successors(Some(start_coords), move |&coords| {
+            let next_coords = add_offset(coords, direction);
+            if self[next_coords].is_empty() {
+                Some(next_coords)
+            } else {
+                None
+            }
+        })
+        .skip(1);
     }
 
     /* Parses a hexagonal grid string into a board. */
@@ -362,22 +378,12 @@ impl Board {
                     let stack_size = tile.stack_size();
                     if stack_size > 1 {
                         /* Iterate through all straight line directions. */
-                        for &dir_offset in NEIGHBOR_OFFSETS.iter() {
+                        for &dir_offset in DIRECTION_OFFSETS.iter() {
                             /* Move to a direction as far as there are empty tiles. */
-                            let mut coords = orig_coords;
-                            loop {
-                                /* Coordinates for the next tile in the direction. */
-                                let next_coords = add_offset(coords, dir_offset);
-
-                                /* If next tile is empty, move to that tile. */
-                                if board[next_coords].is_empty() {
-                                    coords = next_coords;
-                                } else {
-                                    break;
-                                }
-                            }
-                            /* Check if we actually found any empty tiles in the direction. */
-                            if coords != orig_coords {
+                            if let Some(coords) = board
+                                .iter_empty_straight_line(orig_coords, dir_offset)
+                                .last()
+                            {
                                 /* Iterate through all the ways to split the stack. */
                                 for split in 1..stack_size {
                                     let mut next_board = board.clone();
