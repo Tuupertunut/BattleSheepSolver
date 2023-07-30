@@ -3,7 +3,7 @@ mod board;
 #[cfg(test)]
 mod tests;
 
-use board::*;
+use board::{Board, Player};
 use std::{
     sync::{
         atomic::{AtomicI32, Ordering},

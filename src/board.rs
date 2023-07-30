@@ -46,7 +46,7 @@ pub enum TileType {
  * 64-127 = NoTile
  * 128-255 = Empty */
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub struct Tile(u8);
+pub struct Tile(pub u8);
 
 impl Tile {
     pub const MAX_STACK_SIZE: u8 = 32;
@@ -115,8 +115,8 @@ pub fn add_offset((r, q): (isize, isize), (off_r, off_q): (isize, isize)) -> (is
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone)]
 pub struct Board {
     /* Tiles stored in row-major order. */
-    tiles: Vec<Tile>,
-    row_length: usize,
+    pub tiles: Vec<Tile>,
+    pub row_length: usize,
 }
 
 impl Index<(isize, isize)> for Board {
