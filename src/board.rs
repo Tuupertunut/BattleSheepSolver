@@ -203,6 +203,50 @@ impl Board {
         .skip(1);
     }
 
+    /* Extends the board by one in any direction. */
+    pub fn extend_to_contain(&mut self, (r, q): (isize, isize)) -> (isize, isize) {
+        let (mut offset_r, mut offset_q) = (0, 0);
+
+        if r == self.num_rows() as isize {
+            /* Add a new row after. */
+            self.tiles
+                .extend(iter::repeat(Tile::NO_TILE).take(self.row_length));
+        } else if r == -1 {
+            /* Add a new row before. */
+            self.tiles
+                .splice(0..0, iter::repeat(Tile::NO_TILE).take(self.row_length));
+
+            /* Rows have shifted forward by one. */
+            offset_r = 1;
+        }
+
+        if q == self.row_length as isize {
+            /* Add a new column after. */
+            let num_rows = self.num_rows();
+            self.row_length += 1;
+
+            /* Inserting a new tile to the end of every row. */
+            for i in 0..num_rows {
+                self.tiles
+                    .insert(i * self.row_length + (self.row_length - 1), Tile::NO_TILE)
+            }
+        } else if q == -1 {
+            /* Add a new column before. */
+            let num_rows = self.num_rows();
+            self.row_length += 1;
+
+            /* Inserting a new tile to the beginning of every row. */
+            for i in 0..num_rows {
+                self.tiles.insert(i * self.row_length, Tile::NO_TILE)
+            }
+
+            /* Columns have shifted forward by one. */
+            offset_q = 1;
+        }
+
+        return (offset_r, offset_q);
+    }
+
     /* Parses a hexagonal grid string into a board. */
     pub fn parse(input: &str) -> Result<Board, Box<dyn Error>> {
         let row_strings = input

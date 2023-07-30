@@ -1,11 +1,10 @@
-use battle_sheep_solver::board::{Board, Player, Tile, TileType};
+use battle_sheep_solver::board::{add_offset, Board, Player, Tile, TileType};
 use eframe::{
     egui::{self, CentralPanel, Painter, Sense},
     emath::Align2,
     epaint::{pos2, vec2, Color32, FontId, Pos2, Rect, Shape, Stroke},
 };
 use egui_extras::RetainedImage;
-use std::iter;
 
 fn main() {
     let mut options = eframe::NativeOptions::default();
@@ -169,39 +168,15 @@ impl eframe::App for BattleSheepApp {
                                 .iter_neighbors(pointer_coords)
                                 .any(|(_, tile)| tile.is_board_tile())
                             {
-                                let (r, q) = pointer_coords;
-                                if r == self.board.num_rows() as isize {
-                                    self.board.tiles.extend(
-                                        iter::repeat(Tile::NO_TILE).take(self.board.row_length),
-                                    );
-                                } else if r == -1 {
-                                    self.board.tiles.splice(
-                                        0..0,
-                                        iter::repeat(Tile::NO_TILE).take(self.board.row_length),
-                                    );
-                                    pointer_coords.0 += 1;
-                                    self.hover_origin.0 += 1;
-                                }
-                                if q == self.board.row_length as isize {
-                                    let num_rows = self.board.num_rows();
-                                    self.board.row_length += 1;
-                                    for i in 0..num_rows {
-                                        self.board.tiles.insert(
-                                            i * self.board.row_length + (self.board.row_length - 1),
-                                            Tile::NO_TILE,
-                                        )
-                                    }
-                                } else if q == -1 {
-                                    let num_rows = self.board.num_rows();
-                                    self.board.row_length += 1;
-                                    for i in 0..num_rows {
-                                        self.board
-                                            .tiles
-                                            .insert(i * self.board.row_length, Tile::NO_TILE)
-                                    }
-                                    pointer_coords.1 += 1;
-                                    self.hover_origin.1 += 1;
-                                }
+                                /* Extend board to contain the clicked coordinates. If the board is
+                                 * extended on the left or top side, all coordinates are shifted by
+                                 * an offset. The resulting offset is returned and must be applied
+                                 * to all stored coordinates. */
+                                let resulting_offset = self.board.extend_to_contain(pointer_coords);
+
+                                pointer_coords = add_offset(pointer_coords, resulting_offset);
+                                self.hover_origin = add_offset(self.hover_origin, resulting_offset);
+
                                 self.board[pointer_coords] = Tile::EMPTY;
                             }
                         }
