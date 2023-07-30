@@ -106,10 +106,8 @@ impl eframe::App for BattleSheepApp {
         CentralPanel::default().show(ctx, |ui| {
             ui.heading("Hello World!");
             ui.label("text");
-            let (canvas, painter) = ui.allocate_painter(
-                ui.available_size() - vec2(0.0, 20.0),
-                Sense::click_and_drag(),
-            );
+            let (canvas, painter) =
+                ui.allocate_painter(ui.available_size() - vec2(0.0, 20.0), Sense::drag());
 
             let board_rows = self.board.num_rows();
             let mut first_half_column = 0;
@@ -159,7 +157,8 @@ impl eframe::App for BattleSheepApp {
                 let mut pointer_coords = point_to_hex(pointer_pos, grid_start, height);
                 ui.label(format!("{:?}", pointer_coords));
 
-                if canvas.clicked() {
+                /* Clicked but without time or movement limit */
+                if canvas.drag_released() {
                     let clicked_tile = self.board[pointer_coords];
                     match clicked_tile.tile_type() {
                         TileType::NoTile => {
