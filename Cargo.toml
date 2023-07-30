@@ -2,10 +2,14 @@
 name = "battle_sheep_solver"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+default-run = "battle_sheep_solver"
 
 [dependencies]
 rayon = "1.7.0"
 either = "1.9.0"
 next-gen = "0.0.10"
+
+# Gui-only dependencies
+eframe = "0.22.0"
+egui_extras = { version = "0.22.0", features = ["image"] }
+image = { version = "0.24.6", default-features = false, features = ["png"] }
