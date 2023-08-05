@@ -157,7 +157,8 @@ impl eframe::App for BattleSheepApp {
                 let mut pointer_coords = point_to_hex(pointer_pos, grid_start, height);
                 ui.label(format!("{:?}", pointer_coords));
 
-                /* Clicked but without time or movement limit */
+                /* Did click end on this frame? drag_released() is much like clicked() but without
+                 * time or movement limit. */
                 if canvas.drag_released() {
                     let clicked_tile = self.board[pointer_coords];
                     match clicked_tile.tile_type() {
