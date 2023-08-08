@@ -17,10 +17,14 @@ fn main() {
     .unwrap();
 }
 
+struct HoverStack {
+    stack: Tile,
+    origin: Option<(isize, isize)>,
+}
+
 struct BattleSheepApp {
     board: Board,
-    hover_stack: Option<Tile>,
-    hover_origin: (isize, isize),
+    hover_stack: Option<HoverStack>,
     red_image: RetainedImage,
     blue_image: RetainedImage,
 }
@@ -41,7 +45,6 @@ impl BattleSheepApp {
                 row_length: 7,
             },
             hover_stack: None,
-            hover_origin: (0, 0),
             red_image: RetainedImage::from_image_bytes(
                 "redsheep.png",
                 include_bytes!("redsheep.png"),
@@ -153,36 +156,90 @@ impl eframe::App for BattleSheepApp {
                 }
             }
 
+            let max_home = canvas.rect.center_bottom() + vec2(-0.5 * height, -0.5 * height);
+            self.draw_stack(ctx, &painter, max_home, height, Player::Max, 16);
+            let min_home = canvas.rect.center_bottom() + vec2(0.5 * height, -0.5 * height);
+            self.draw_stack(ctx, &painter, min_home, height, Player::Min, 16);
+
             if let Some(pointer_pos) = canvas.hover_pos() {
-                let mut pointer_coords = point_to_hex(pointer_pos, grid_start, height);
+                let pointer_coords = point_to_hex(pointer_pos, grid_start, height);
                 ui.label(format!("{:?}", pointer_coords));
 
                 /* Did click end on this frame? drag_released() is much like clicked() but without
                  * time or movement limit. */
                 if canvas.drag_released() {
-                    let clicked_tile = self.board[pointer_coords];
+                    if Rect::from_center_size(max_home, vec2(height, height)).contains(pointer_pos)
+                    {
+                        match self.hover_stack {
+                            None => {
+                                self.hover_stack = Some(HoverStack {
+                                    stack: Tile::new(TileType::Stack, Player::Max, 16),
+                                    origin: None,
+                                });
+                            }
+                            Some(HoverStack {
+                                origin: hover_origin,
+                                ..
+                            }) => {
+                                if hover_origin == None {
+                                    self.hover_stack = None;
+                                }
+                            }
+                        }
+                    } else if Rect::from_center_size(min_home, vec2(height, height))
+                        .contains(pointer_pos)
+                    {
+                        match self.hover_stack {
+                            None => {
+                                self.hover_stack = Some(HoverStack {
+                                    stack: Tile::new(TileType::Stack, Player::Min, 16),
+                                    origin: None,
+                                });
+                            }
+                            Some(HoverStack {
+                                origin: hover_origin,
+                                ..
+                            }) => {
+                                if hover_origin == None {
+                                    self.hover_stack = None;
+                                }
+                            }
+                        }
+                    }
+
+                    let mut clicked_coords = pointer_coords;
+                    let clicked_tile = self.board[clicked_coords];
                     match clicked_tile.tile_type() {
                         TileType::NoTile => {
                             if self
                                 .board
-                                .iter_neighbors(pointer_coords)
+                                .iter_neighbors(clicked_coords)
                                 .any(|(_, tile)| tile.is_board_tile())
                             {
                                 /* Extend board to contain the clicked coordinates. If the board is
                                  * extended on the left or top side, all coordinates are shifted by
                                  * an offset. The resulting offset is returned and must be applied
                                  * to all stored coordinates. */
-                                let resulting_offset = self.board.extend_to_contain(pointer_coords);
+                                let resulting_offset = self.board.extend_to_contain(clicked_coords);
 
-                                pointer_coords = add_offset(pointer_coords, resulting_offset);
-                                self.hover_origin = add_offset(self.hover_origin, resulting_offset);
+                                clicked_coords = add_offset(clicked_coords, resulting_offset);
+                                if let Some(HoverStack {
+                                    origin: Some(hover_origin),
+                                    ..
+                                }) = &mut self.hover_stack
+                                {
+                                    *hover_origin = add_offset(*hover_origin, resulting_offset);
+                                }
 
-                                self.board[pointer_coords] = Tile::EMPTY;
+                                self.board[clicked_coords] = Tile::EMPTY;
                             }
                         }
                         TileType::Empty => {
-                            if let Some(hover_stack) = self.hover_stack {
-                                self.board[pointer_coords] = hover_stack;
+                            if let Some(HoverStack {
+                                stack: hover_stack, ..
+                            }) = self.hover_stack
+                            {
+                                self.board[clicked_coords] = hover_stack;
                                 self.hover_stack = None;
                             }
                         }
@@ -192,22 +249,27 @@ impl eframe::App for BattleSheepApp {
                                 None => {
                                     if stack_size > 1 {
                                         let half_size = stack_size / 2;
-                                        self.hover_stack = Some(Tile::new(
-                                            TileType::Stack,
-                                            clicked_tile.player(),
-                                            half_size,
-                                        ));
-                                        self.hover_origin = pointer_coords;
-                                        self.board[pointer_coords] = Tile::new(
+                                        self.hover_stack = Some(HoverStack {
+                                            stack: Tile::new(
+                                                TileType::Stack,
+                                                clicked_tile.player(),
+                                                half_size,
+                                            ),
+                                            origin: Some(clicked_coords),
+                                        });
+                                        self.board[clicked_coords] = Tile::new(
                                             TileType::Stack,
                                             clicked_tile.player(),
                                             stack_size - half_size,
                                         );
                                     }
                                 }
-                                Some(hover_stack) => {
-                                    if pointer_coords == self.hover_origin {
-                                        self.board[pointer_coords] = Tile::new(
+                                Some(HoverStack {
+                                    stack: hover_stack,
+                                    origin: hover_origin,
+                                }) => {
+                                    if hover_origin == Some(clicked_coords) {
+                                        self.board[clicked_coords] = Tile::new(
                                             TileType::Stack,
                                             clicked_tile.player(),
                                             stack_size + hover_stack.stack_size(),
@@ -220,23 +282,54 @@ impl eframe::App for BattleSheepApp {
                     }
                 }
 
-                if let Some(hover_stack) = self.hover_stack {
+                if let Some(HoverStack {
+                    stack: hover_stack,
+                    origin: hover_origin,
+                }) = self.hover_stack
+                {
                     let scroll_delta = ui.input(|i| i.scroll_delta);
                     if scroll_delta.y != 0.0 {
-                        let hover_origin = self.board[self.hover_origin];
-                        let (new_hover_size, new_origin_size) = if scroll_delta.y > 0.0 {
-                            (hover_stack.stack_size() + 1, hover_origin.stack_size() - 1)
-                        } else {
-                            (hover_stack.stack_size() - 1, hover_origin.stack_size() + 1)
-                        };
-                        if new_hover_size >= 1 && new_origin_size >= 1 {
-                            self.hover_stack = Some(Tile::new(
-                                TileType::Stack,
-                                hover_stack.player(),
-                                new_hover_size,
-                            ));
-                            self.board[self.hover_origin] =
-                                Tile::new(TileType::Stack, hover_origin.player(), new_origin_size);
+                        match hover_origin {
+                            Some(hover_origin) => {
+                                let hover_origin_stack = self.board[hover_origin];
+                                let (new_hover_size, new_origin_size) = if scroll_delta.y > 0.0 {
+                                    (
+                                        hover_stack.stack_size() + 1,
+                                        hover_origin_stack.stack_size() - 1,
+                                    )
+                                } else {
+                                    (
+                                        hover_stack.stack_size() - 1,
+                                        hover_origin_stack.stack_size() + 1,
+                                    )
+                                };
+                                if new_hover_size >= 1 && new_origin_size >= 1 {
+                                    self.hover_stack.as_mut().unwrap().stack = Tile::new(
+                                        TileType::Stack,
+                                        hover_stack.player(),
+                                        new_hover_size,
+                                    );
+                                    self.board[hover_origin] = Tile::new(
+                                        TileType::Stack,
+                                        hover_origin_stack.player(),
+                                        new_origin_size,
+                                    );
+                                }
+                            }
+                            None => {
+                                let new_hover_size = if scroll_delta.y > 0.0 {
+                                    hover_stack.stack_size() + 1
+                                } else {
+                                    hover_stack.stack_size() - 1
+                                };
+                                if new_hover_size >= 1 && new_hover_size <= Tile::MAX_STACK_SIZE {
+                                    self.hover_stack.as_mut().unwrap().stack = Tile::new(
+                                        TileType::Stack,
+                                        hover_stack.player(),
+                                        new_hover_size,
+                                    );
+                                }
+                            }
                         }
                     }
 
