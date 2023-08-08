@@ -1,4 +1,4 @@
-use battle_sheep_solver::board::{add_offset, Board, Player, Tile, TileType};
+use battle_sheep_solver::board::{add_offset, Board, Player, Tile, TileType, DIRECTION_OFFSETS};
 use eframe::{
     egui::{self, CentralPanel, Painter, Sense},
     emath::Align2,
@@ -62,7 +62,11 @@ impl BattleSheepApp {
         };
     }
 
-    fn draw_empty_tile(&self, painter: &Painter, middle_point: Pos2, height: f32) {
+    const TILE_COLOR: Color32 = Color32::GREEN;
+    const HIGHLIGHT_COLOR: Color32 = Color32::from_rgb(0, 255, 180);
+    const PATH_HIGHLIGHT_COLOR: Color32 = Color32::from_rgb(140, 220, 0);
+
+    fn draw_empty_tile(&self, painter: &Painter, middle_point: Pos2, height: f32, color: Color32) {
         let quarter_height = height / 4.0;
         let half_width = f32::sqrt(3.0) * quarter_height;
         painter.add(Shape::convex_polygon(
@@ -74,7 +78,7 @@ impl BattleSheepApp {
                 middle_point + vec2(-half_width, quarter_height),
                 middle_point + vec2(-half_width, -quarter_height),
             ],
-            Color32::GREEN,
+            color,
             Stroke::new(height * 0.08, Color32::DARK_GREEN),
         ));
     }
@@ -145,7 +149,7 @@ impl eframe::App for BattleSheepApp {
                 if tile.is_board_tile() {
                     let middle_point = hex_to_middle_point(hex_coords, grid_start, height);
 
-                    self.draw_empty_tile(&painter, middle_point, height);
+                    self.draw_empty_tile(&painter, middle_point, height, Self::TILE_COLOR);
 
                     if tile.is_stack() {
                         self.draw_stack(
@@ -272,11 +276,32 @@ impl eframe::App for BattleSheepApp {
                         }
                         TileType::Empty => {
                             if let Some(HoverStack {
-                                stack: hover_stack, ..
+                                stack: hover_stack,
+                                origin: hover_origin,
                             }) = self.hover_stack
                             {
-                                self.board[clicked_coords] = hover_stack;
-                                self.hover_stack = None;
+                                match hover_origin {
+                                    Some(hover_origin) => {
+                                        if self
+                                            .board
+                                            .iter_empty_straight_line_ends(hover_origin)
+                                            .any(|coords| coords == clicked_coords)
+                                        {
+                                            self.board[clicked_coords] = hover_stack;
+                                            self.hover_stack = None;
+                                        }
+                                    }
+                                    None => {
+                                        if self
+                                            .board
+                                            .iter_empty_outer_edge()
+                                            .any(|coords| coords == clicked_coords)
+                                        {
+                                            self.board[clicked_coords] = hover_stack;
+                                            self.hover_stack = None;
+                                        }
+                                    }
+                                }
                             }
                         }
                         TileType::Stack => {
@@ -365,6 +390,40 @@ impl eframe::App for BattleSheepApp {
                                         new_hover_size,
                                     );
                                 }
+                            }
+                        }
+                    }
+
+                    match hover_origin {
+                        Some(hover_origin) => {
+                            for &dir in DIRECTION_OFFSETS.iter() {
+                                for coords in self.board.iter_empty_straight_line(hover_origin, dir)
+                                {
+                                    self.draw_empty_tile(
+                                        &painter,
+                                        hex_to_middle_point(coords, grid_start, height),
+                                        height,
+                                        Self::PATH_HIGHLIGHT_COLOR,
+                                    );
+                                }
+                            }
+                            for coords in self.board.iter_empty_straight_line_ends(hover_origin) {
+                                self.draw_empty_tile(
+                                    &painter,
+                                    hex_to_middle_point(coords, grid_start, height),
+                                    height,
+                                    Self::HIGHLIGHT_COLOR,
+                                );
+                            }
+                        }
+                        None => {
+                            for coords in self.board.iter_empty_outer_edge() {
+                                self.draw_empty_tile(
+                                    &painter,
+                                    hex_to_middle_point(coords, grid_start, height),
+                                    height,
+                                    Self::HIGHLIGHT_COLOR,
+                                );
                             }
                         }
                     }
