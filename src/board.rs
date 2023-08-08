@@ -468,33 +468,26 @@ impl Board {
 
     /* Iterates through regular moves where player splits a stack and moves it. */
     fn possible_regular_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
-        #[generator(Board)]
-        fn generate_moves(board: &Board, player: Player) {
-            /* Iterate through all tiles. */
-            for (orig_coords, tile) in board.iter_row_major() {
-                /* Check if the tile is a splittable stack of this player. */
-                if tile.is_stack() && tile.player() == player {
-                    let stack_size = tile.stack_size();
-                    if stack_size > 1 {
-                        /* Iterate through the ends of all straight line directions. */
-                        for coords in board.iter_empty_straight_line_ends(orig_coords) {
-                            /* Iterate through all the ways to split the stack. */
-                            for split in 1..stack_size {
-                                let mut next_board = board.clone();
-                                next_board[coords] = Tile::new(TileType::Stack, player, split);
-                                next_board[orig_coords] =
-                                    Tile::new(TileType::Stack, player, stack_size - split);
+        return self
+            .iter_row_major()
+            /* Check if the tile is a splittable stack of this player. */
+            .filter(move |(_, tile)| {
+                tile.is_stack() && tile.player() == player && tile.stack_size() > 1
+            })
+            .flat_map(move |(origin_coords, stack)| {
+                self.iter_empty_straight_line_ends(origin_coords)
+                    .flat_map(move |target_coords| {
+                        /* Iterate through all the ways to split the stack. */
+                        (1..stack.stack_size()).map(move |split| {
+                            let mut next_board = self.clone();
+                            next_board[target_coords] = Tile::new(TileType::Stack, player, split);
+                            next_board[origin_coords] =
+                                Tile::new(TileType::Stack, player, stack.stack_size() - split);
 
-                                yield_!(next_board);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        mk_gen!(let generator = box generate_moves(self, player));
-        return generator.into_iter();
+                            next_board
+                        })
+                    })
+            });
     }
 
     /* Iterates through starting moves where player places a stack on the outer edge. */
