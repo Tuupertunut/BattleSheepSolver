@@ -25,6 +25,8 @@ struct HoverStack {
 struct BattleSheepApp {
     board: Board,
     hover_stack: Option<HoverStack>,
+    min_home_stack: Option<Tile>,
+    max_home_stack: Option<Tile>,
     red_image: RetainedImage,
     blue_image: RetainedImage,
 }
@@ -45,6 +47,8 @@ impl BattleSheepApp {
                 row_length: 7,
             },
             hover_stack: None,
+            min_home_stack: Some(Tile::new(TileType::Stack, Player::Min, 16)),
+            max_home_stack: Some(Tile::new(TileType::Stack, Player::Max, 16)),
             red_image: RetainedImage::from_image_bytes(
                 "redsheep.png",
                 include_bytes!("redsheep.png"),
@@ -157,9 +161,27 @@ impl eframe::App for BattleSheepApp {
             }
 
             let max_home = canvas.rect.center_bottom() + vec2(-0.5 * height, -0.5 * height);
-            self.draw_stack(ctx, &painter, max_home, height, Player::Max, 16);
+            if let Some(max_home_stack) = self.max_home_stack {
+                self.draw_stack(
+                    ctx,
+                    &painter,
+                    max_home,
+                    height,
+                    max_home_stack.player(),
+                    max_home_stack.stack_size(),
+                );
+            }
             let min_home = canvas.rect.center_bottom() + vec2(0.5 * height, -0.5 * height);
-            self.draw_stack(ctx, &painter, min_home, height, Player::Min, 16);
+            if let Some(min_home_stack) = self.min_home_stack {
+                self.draw_stack(
+                    ctx,
+                    &painter,
+                    min_home,
+                    height,
+                    min_home_stack.player(),
+                    min_home_stack.stack_size(),
+                );
+            }
 
             if let Some(pointer_pos) = canvas.hover_pos() {
                 let pointer_coords = point_to_hex(pointer_pos, grid_start, height);
@@ -170,38 +192,52 @@ impl eframe::App for BattleSheepApp {
                 if canvas.drag_released() {
                     if Rect::from_center_size(max_home, vec2(height, height)).contains(pointer_pos)
                     {
-                        match self.hover_stack {
-                            None => {
-                                self.hover_stack = Some(HoverStack {
-                                    stack: Tile::new(TileType::Stack, Player::Max, 16),
-                                    origin: None,
-                                });
+                        match self.max_home_stack {
+                            Some(max_home_stack) => {
+                                if let None = self.hover_stack {
+                                    self.hover_stack = Some(HoverStack {
+                                        stack: max_home_stack,
+                                        origin: None,
+                                    });
+                                    self.max_home_stack = None;
+                                }
                             }
-                            Some(HoverStack {
-                                origin: hover_origin,
-                                ..
-                            }) => {
-                                if hover_origin == None {
-                                    self.hover_stack = None;
+                            None => {
+                                if let Some(HoverStack {
+                                    stack: hover_stack,
+                                    origin: hover_origin,
+                                }) = self.hover_stack
+                                {
+                                    if hover_origin == None {
+                                        self.max_home_stack = Some(hover_stack);
+                                        self.hover_stack = None;
+                                    }
                                 }
                             }
                         }
                     } else if Rect::from_center_size(min_home, vec2(height, height))
                         .contains(pointer_pos)
                     {
-                        match self.hover_stack {
-                            None => {
-                                self.hover_stack = Some(HoverStack {
-                                    stack: Tile::new(TileType::Stack, Player::Min, 16),
-                                    origin: None,
-                                });
+                        match self.min_home_stack {
+                            Some(min_home_stack) => {
+                                if let None = self.hover_stack {
+                                    self.hover_stack = Some(HoverStack {
+                                        stack: min_home_stack,
+                                        origin: None,
+                                    });
+                                    self.min_home_stack = None;
+                                }
                             }
-                            Some(HoverStack {
-                                origin: hover_origin,
-                                ..
-                            }) => {
-                                if hover_origin == None {
-                                    self.hover_stack = None;
+                            None => {
+                                if let Some(HoverStack {
+                                    stack: hover_stack,
+                                    origin: hover_origin,
+                                }) = self.hover_stack
+                                {
+                                    if hover_origin == None {
+                                        self.min_home_stack = Some(hover_stack);
+                                        self.hover_stack = None;
+                                    }
                                 }
                             }
                         }
