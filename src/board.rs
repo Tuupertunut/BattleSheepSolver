@@ -183,7 +183,7 @@ impl Board {
     ) -> impl Iterator<Item = ((isize, isize), Tile)> + '_ {
         return DIRECTION_OFFSETS.iter().map(move |&offset| {
             let neighbor_coords = add_offset(coords, offset);
-            return (neighbor_coords, self[neighbor_coords]);
+            (neighbor_coords, self[neighbor_coords])
         });
     }
 
@@ -201,6 +201,51 @@ impl Board {
             }
         })
         .skip(1);
+    }
+
+    pub fn iter_empty_outer_edge(&self) -> impl Iterator<Item = (isize, isize)> + '_ {
+        #[generator((isize, isize))]
+        fn generate_edge(board: &Board) {
+            /* We know that the first board tile we encounter must be on the outer edge. */
+            let (start_coords, start) = board
+                .iter_row_major()
+                .find(|&(_, tile)| tile.is_board_tile())
+                .expect("The board is empty");
+
+            /* The first board tile we encountered must be on the left edge of the board, so its
+             * left side (offset (0, -1)) is a safe direction to start iterating neighbors. */
+            let mut previous_coords = add_offset(start_coords, (0, -1));
+            let mut coords = start_coords;
+
+            /* Iterate along the outer edge of the board. */
+            loop {
+                /* Search through the neighbors of coords in clockwise direction starting from
+                 * previous_coords. Find the first board tile. That board tile must also be on
+                 * the outer edge. */
+                let (next_coords, next) = board
+                    .iter_neighbors(coords)
+                    .chain(board.iter_neighbors(coords))
+                    .skip_while(|&(neighbor_coords, _)| neighbor_coords != previous_coords)
+                    .skip(1)
+                    .find(|&(_, neighbor)| neighbor.is_board_tile())
+                    .unwrap_or((start_coords, start));
+
+                if next.is_empty() {
+                    yield_!(next_coords);
+                }
+
+                /* We have come a full circle. */
+                if next_coords == start_coords {
+                    break;
+                }
+
+                previous_coords = coords;
+                coords = next_coords;
+            }
+        }
+
+        mk_gen!(let generator = box generate_edge(self));
+        return generator.into_iter();
     }
 
     /* Extends the board by one in any direction. */
@@ -450,51 +495,12 @@ impl Board {
 
     /* Iterates through starting moves where player places a stack on the outer edge. */
     fn possible_starting_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
-        #[generator(Board)]
-        fn generate_moves(board: &Board, player: Player) {
-            /* We know that the first board tile we encounter must be on the outer edge. */
-            let (start_coords, start) = board
-                .iter_row_major()
-                .find(|&(_, tile)| tile.is_board_tile())
-                .expect("The board is empty");
+        return self.iter_empty_outer_edge().map(move |coords| {
+            let mut next_board = self.clone();
+            next_board[coords] = Tile::new(TileType::Stack, player, 16);
 
-            /* The first board tile we encountered must be on the left edge of the board, so its
-             * left side (offset (0, -1)) is a safe direction to start iterating neighbors. */
-            let mut previous_coords = add_offset(start_coords, (0, -1));
-            let mut coords = start_coords;
-
-            /* Iterate along the outer edge of the board. */
-            loop {
-                /* Search through the neighbors of coords in clockwise direction starting from
-                 * previous_coords. Find the first board tile. That board tile must also be on
-                 * the outer edge. */
-                let (next_coords, next) = board
-                    .iter_neighbors(coords)
-                    .chain(board.iter_neighbors(coords))
-                    .skip_while(|&(neighbor_coords, _)| neighbor_coords != previous_coords)
-                    .skip(1)
-                    .find(|&(_, neighbor)| neighbor.is_board_tile())
-                    .unwrap_or((start_coords, start));
-
-                if next.is_empty() {
-                    let mut next_board = board.clone();
-                    next_board[next_coords] = Tile::new(TileType::Stack, player, 16);
-
-                    yield_!(next_board);
-                }
-
-                /* We have come a full circle. */
-                if next_coords == start_coords {
-                    break;
-                }
-
-                previous_coords = coords;
-                coords = next_coords;
-            }
-        }
-
-        mk_gen!(let generator = box generate_moves(self, player));
-        return generator.into_iter();
+            next_board
+        });
     }
 
     /* Evaluates the current board state. Positive number means Max has an advantage, negative means
