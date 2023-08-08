@@ -128,7 +128,7 @@ impl eframe::App for BattleSheepApp {
             );
 
             let ideal_by_x = canvas.rect.width() / (board_size_heights.x + 2.0);
-            let ideal_by_y = canvas.rect.height() / (board_size_heights.y + 2.0);
+            let ideal_by_y = canvas.rect.height() / (board_size_heights.y + 3.0);
 
             let height = f32::min(ideal_by_x, ideal_by_y);
             let grid_start = canvas.rect.min
