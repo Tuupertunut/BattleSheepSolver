@@ -203,6 +203,16 @@ impl Board {
         .skip(1);
     }
 
+    pub fn iter_empty_straight_line_ends(
+        &self,
+        start_coords: (isize, isize),
+    ) -> impl Iterator<Item = (isize, isize)> + '_ {
+        return DIRECTION_OFFSETS.iter().filter_map(move |&direction| {
+            self.iter_empty_straight_line(start_coords, direction)
+                .last()
+        });
+    }
+
     pub fn iter_empty_outer_edge(&self) -> impl Iterator<Item = (isize, isize)> + '_ {
         #[generator((isize, isize))]
         fn generate_edge(board: &Board) {
@@ -466,22 +476,16 @@ impl Board {
                 if tile.is_stack() && tile.player() == player {
                     let stack_size = tile.stack_size();
                     if stack_size > 1 {
-                        /* Iterate through all straight line directions. */
-                        for &dir_offset in DIRECTION_OFFSETS.iter() {
-                            /* Move to a direction as far as there are empty tiles. */
-                            if let Some(coords) = board
-                                .iter_empty_straight_line(orig_coords, dir_offset)
-                                .last()
-                            {
-                                /* Iterate through all the ways to split the stack. */
-                                for split in 1..stack_size {
-                                    let mut next_board = board.clone();
-                                    next_board[coords] = Tile::new(TileType::Stack, player, split);
-                                    next_board[orig_coords] =
-                                        Tile::new(TileType::Stack, player, stack_size - split);
+                        /* Iterate through the ends of all straight line directions. */
+                        for coords in board.iter_empty_straight_line_ends(orig_coords) {
+                            /* Iterate through all the ways to split the stack. */
+                            for split in 1..stack_size {
+                                let mut next_board = board.clone();
+                                next_board[coords] = Tile::new(TileType::Stack, player, split);
+                                next_board[orig_coords] =
+                                    Tile::new(TileType::Stack, player, stack_size - split);
 
-                                    yield_!(next_board);
-                                }
+                                yield_!(next_board);
                             }
                         }
                     }
