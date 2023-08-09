@@ -35,16 +35,8 @@ impl BattleSheepApp {
     fn new() -> Self {
         return Self {
             board: Board {
-                tiles: [
-                    vec![Tile::EMPTY; 10],
-                    vec![Tile::new(TileType::Stack, Player::Max, 16)],
-                    vec![Tile::new(TileType::Stack, Player::Min, 3)],
-                    vec![Tile::EMPTY; 5],
-                    vec![Tile::NO_TILE],
-                    vec![Tile::EMPTY; 3],
-                ]
-                .concat(),
-                row_length: 7,
+                tiles: vec![Tile::EMPTY],
+                row_length: 1,
             },
             hover_stack: None,
             min_home_stack: Some(Tile::new(TileType::Stack, Player::Min, 16)),
