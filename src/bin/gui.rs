@@ -245,8 +245,12 @@ impl eframe::App for BattleSheepApp {
                         TileType::NoTile => {
                             if self
                                 .board
-                                .iter_neighbors(clicked_coords)
-                                .any(|(_, tile)| tile.is_board_tile())
+                                .iter_row_major()
+                                .all(|(_, tile)| !tile.is_stack())
+                                && self
+                                    .board
+                                    .iter_neighbors(clicked_coords)
+                                    .any(|(_, tile)| tile.is_board_tile())
                             {
                                 /* Extend board to contain the clicked coordinates. If the board is
                                  * extended on the left or top side, all coordinates are shifted by
