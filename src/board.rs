@@ -68,6 +68,10 @@ impl Tile {
         return Self(bitfield);
     }
 
+    pub fn stack(player: Player, stack_size: u8) -> Self {
+        return Self::new(TileType::Stack, player, stack_size);
+    }
+
     pub fn tile_type(self) -> TileType {
         if self.0 < 64 {
             return TileType::Stack;
@@ -379,7 +383,7 @@ impl Board {
                         return Err("Stack size is 0")?;
                     }
 
-                    tiles.push(Tile::new(TileType::Stack, player, stack_size));
+                    tiles.push(Tile::stack(player, stack_size));
                 }
             }
         }
@@ -480,9 +484,9 @@ impl Board {
                         /* Iterate through all the ways to split the stack. */
                         (1..stack.stack_size()).map(move |split| {
                             let mut next_board = self.clone();
-                            next_board[target_coords] = Tile::new(TileType::Stack, player, split);
+                            next_board[target_coords] = Tile::stack(player, split);
                             next_board[origin_coords] =
-                                Tile::new(TileType::Stack, player, stack.stack_size() - split);
+                                Tile::stack(player, stack.stack_size() - split);
 
                             next_board
                         })
@@ -494,7 +498,7 @@ impl Board {
     fn possible_starting_moves(&self, player: Player) -> impl Iterator<Item = Board> + '_ {
         return self.iter_empty_outer_edge().map(move |coords| {
             let mut next_board = self.clone();
-            next_board[coords] = Tile::new(TileType::Stack, player, 16);
+            next_board[coords] = Tile::stack(player, 16);
 
             next_board
         });

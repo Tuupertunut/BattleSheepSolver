@@ -39,8 +39,8 @@ impl BattleSheepApp {
                 row_length: 1,
             },
             hover_stack: None,
-            min_home_stack: Some(Tile::new(TileType::Stack, Player::Min, 16)),
-            max_home_stack: Some(Tile::new(TileType::Stack, Player::Max, 16)),
+            min_home_stack: Some(Tile::stack(Player::Min, 16)),
+            max_home_stack: Some(Tile::stack(Player::Max, 16)),
             red_image: RetainedImage::from_image_bytes(
                 "redsheep.png",
                 include_bytes!("redsheep.png"),
@@ -307,15 +307,10 @@ impl eframe::App for BattleSheepApp {
                                     if stack_size > 1 {
                                         let half_size = stack_size / 2;
                                         self.hover_stack = Some(HoverStack {
-                                            stack: Tile::new(
-                                                TileType::Stack,
-                                                clicked_tile.player(),
-                                                half_size,
-                                            ),
+                                            stack: Tile::stack(clicked_tile.player(), half_size),
                                             origin: Some(clicked_coords),
                                         });
-                                        self.board[clicked_coords] = Tile::new(
-                                            TileType::Stack,
+                                        self.board[clicked_coords] = Tile::stack(
                                             clicked_tile.player(),
                                             stack_size - half_size,
                                         );
@@ -326,8 +321,7 @@ impl eframe::App for BattleSheepApp {
                                     origin: hover_origin,
                                 }) => {
                                     if hover_origin == Some(clicked_coords) {
-                                        self.board[clicked_coords] = Tile::new(
-                                            TileType::Stack,
+                                        self.board[clicked_coords] = Tile::stack(
                                             clicked_tile.player(),
                                             stack_size + hover_stack.stack_size(),
                                         );
@@ -361,16 +355,10 @@ impl eframe::App for BattleSheepApp {
                                     )
                                 };
                                 if new_hover_size >= 1 && new_origin_size >= 1 {
-                                    self.hover_stack.as_mut().unwrap().stack = Tile::new(
-                                        TileType::Stack,
-                                        hover_stack.player(),
-                                        new_hover_size,
-                                    );
-                                    self.board[hover_origin] = Tile::new(
-                                        TileType::Stack,
-                                        hover_origin_stack.player(),
-                                        new_origin_size,
-                                    );
+                                    self.hover_stack.as_mut().unwrap().stack =
+                                        Tile::stack(hover_stack.player(), new_hover_size);
+                                    self.board[hover_origin] =
+                                        Tile::stack(hover_origin_stack.player(), new_origin_size);
                                 }
                             }
                             None => {
@@ -380,11 +368,8 @@ impl eframe::App for BattleSheepApp {
                                     hover_stack.stack_size() - 1
                                 };
                                 if new_hover_size >= 1 && new_hover_size <= Tile::MAX_STACK_SIZE {
-                                    self.hover_stack.as_mut().unwrap().stack = Tile::new(
-                                        TileType::Stack,
-                                        hover_stack.player(),
-                                        new_hover_size,
-                                    );
+                                    self.hover_stack.as_mut().unwrap().stack =
+                                        Tile::stack(hover_stack.player(), new_hover_size);
                                 }
                             }
                         }
