@@ -17,7 +17,7 @@ fn main() {
             args[0]
         );
     }
-    let human_max = match args[1].as_str() {
+    let human_player = match args[1].as_str() {
         "-p" => true,
         "-w" => false,
         _ => unreachable!(),
@@ -27,8 +27,8 @@ fn main() {
     let mut board = read_board_from_user();
     println!("{}", board.write(true));
 
-    /* Min always starts. */
-    let mut player = Player::Min;
+    /* Player 0 always starts. */
+    let mut player = Player(0);
 
     let mut turns = 0;
     let mut total_duration = Duration::ZERO;
@@ -39,16 +39,16 @@ fn main() {
 
         /* The player chooses a move. */
         let (next_board, val, visited) = choose_move(player, &board, 7, i32::MIN + 1, i32::MAX);
-        let value = player.sign() * val;
+        let value = player.direction() * val;
 
         match next_board {
             None => {
                 /* The player could not choose a move, so the game is over. */
                 println!();
                 if value > 0 {
-                    println!("Max won!");
+                    println!("Blue won!");
                 } else if value < 0 {
-                    println!("Min won!")
+                    println!("Red won!")
                 } else {
                     println!("Draw!")
                 }
@@ -66,8 +66,9 @@ fn main() {
                 println!(
                     "{}'s turn",
                     match player {
-                        Player::Min => "Min",
-                        Player::Max => "Max",
+                        Player(0) => "Red",
+                        Player(1) => "Blue",
+                        _ => unreachable!(),
                     }
                 );
                 println!(
@@ -80,23 +81,20 @@ fn main() {
                 turns += 1;
 
                 /* Setting up the next turn. */
-                if human_max {
-                    /* Max is a human player (the user). Their whole turn is played just by asking
-                     * them for a board. After that it's Min's turn again. */
+                if human_player {
+                    /* Player 1 is a human player (the user). Their whole turn is played just by asking
+                     * them for a board. After that it's Player 0's turn again. */
                     println!();
-                    println!("Max's turn");
+                    println!("Blue's turn");
                     println!("Enter a board (finish with an empty line)");
                     board = read_board_from_user();
                     println!("{}", board.write(true));
 
-                    player = Player::Min;
+                    player = Player(0);
                 } else {
-                    /* The next turn is played by the opposite player. */
+                    /* The next turn is played by another player. */
                     board = next_board;
-                    player = match player {
-                        Player::Min => Player::Max,
-                        Player::Max => Player::Min,
-                    };
+                    player = player.next();
                 }
             }
         }

@@ -38,7 +38,7 @@ pub fn choose_move(
      * sooner.
      * Min's moves are sorted smallest heuristic first and Max's by largest first. */
     let mut moves = sort_iter_by_cached_key(board.possible_moves(player), |next_board| {
-        -player.sign() * next_board.heuristic_evaluate()
+        -player.direction() * next_board.heuristic_evaluate()
     });
 
     /* Result is wrapped in a mutex so it can be updated from multiple threads. */
@@ -53,7 +53,7 @@ pub fn choose_move(
          * bounds and the resulting value are negated. This allows us to use the same function for
          * both players. */
         let (val, visited) = evaluate(
-            player.opposite(),
+            player.next(),
             &next_board,
             heuristic_depth - 1,
             -beta,
@@ -96,7 +96,7 @@ pub fn choose_move(
     /* If there were no possible moves, fall back to heuristic evaluation. */
     if max_value == i32::MIN {
         let chosen_move = None;
-        let max_value = player.sign() * board.heuristic_evaluate();
+        let max_value = player.direction() * board.heuristic_evaluate();
         let total_visited = 1;
         return (chosen_move, max_value, total_visited);
     }
@@ -114,7 +114,7 @@ pub fn evaluate(
 ) -> (i32, u64) {
     /* At depth 0 use heuristic evaluation. */
     if heuristic_depth == 0 {
-        let max_value = player.sign() * board.heuristic_evaluate();
+        let max_value = player.direction() * board.heuristic_evaluate();
         let total_visited = 1;
         return (max_value, total_visited);
     } else {
@@ -127,7 +127,7 @@ pub fn evaluate(
              * pruning to take effect sooner.
              * Min's moves are sorted smallest heuristic first and Max's by largest first. */
             let moves = sort_iter_by_cached_key(board.possible_moves(player), |next_board| {
-                -player.sign() * next_board.heuristic_evaluate()
+                -player.direction() * next_board.heuristic_evaluate()
             });
             result = minimax_evaluate(player, moves, heuristic_depth, alpha, beta);
         } else {
@@ -140,7 +140,7 @@ pub fn evaluate(
 
         /* If there were no possible moves, fall back to heuristic evaluation. */
         if max_value == i32::MIN {
-            let max_value = player.sign() * board.heuristic_evaluate();
+            let max_value = player.direction() * board.heuristic_evaluate();
             let total_visited = 1;
             return (max_value, total_visited);
         }
@@ -169,7 +169,7 @@ pub fn minimax_evaluate<I: Iterator<Item = Board>>(
          * bounds and the resulting value are negated. This allows us to use the same function for
          * both players. */
         let (val, visited) = evaluate(
-            player.opposite(),
+            player.next(),
             &next_board,
             heuristic_depth - 1,
             -beta,

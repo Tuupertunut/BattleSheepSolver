@@ -25,8 +25,7 @@ struct HoverStack {
 struct BattleSheepApp {
     board: Board,
     hover_stack: Option<HoverStack>,
-    min_home_stack: Option<Tile>,
-    max_home_stack: Option<Tile>,
+    home_stacks: [Option<Tile>; Player::PLAYER_COUNT as usize],
     red_image: RetainedImage,
     blue_image: RetainedImage,
 }
@@ -39,8 +38,11 @@ impl BattleSheepApp {
                 row_length: 1,
             },
             hover_stack: None,
-            min_home_stack: Some(Tile::stack(Player::Min, 16)),
-            max_home_stack: Some(Tile::stack(Player::Max, 16)),
+            home_stacks: Player::iter()
+                .map(|player| Some(Tile::stack(player, 16)))
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
             red_image: RetainedImage::from_image_bytes(
                 "redsheep.png",
                 include_bytes!("redsheep.png"),
@@ -85,8 +87,9 @@ impl BattleSheepApp {
         stack_size: u8,
     ) {
         let image = match player {
-            Player::Min => &self.red_image,
-            Player::Max => &self.blue_image,
+            Player(0) => &self.red_image,
+            Player(1) => &self.blue_image,
+            _ => unreachable!(),
         };
         painter.image(
             image.texture_id(ctx),
@@ -156,27 +159,58 @@ impl eframe::App for BattleSheepApp {
                 }
             }
 
-            let max_home = canvas.rect.center_bottom() + vec2(-0.5 * height, -0.5 * height);
-            if let Some(max_home_stack) = self.max_home_stack {
-                self.draw_stack(
-                    ctx,
-                    &painter,
-                    max_home,
-                    height,
-                    max_home_stack.player(),
-                    max_home_stack.stack_size(),
-                );
-            }
-            let min_home = canvas.rect.center_bottom() + vec2(0.5 * height, -0.5 * height);
-            if let Some(min_home_stack) = self.min_home_stack {
-                self.draw_stack(
-                    ctx,
-                    &painter,
-                    min_home,
-                    height,
-                    min_home_stack.player(),
-                    min_home_stack.stack_size(),
-                );
+            for player in Player::iter() {
+                let player_id = player.id() as usize;
+                let home_stack = self.home_stacks[player_id];
+
+                let home = canvas.rect.center_bottom()
+                    + vec2(
+                        ((Player::PLAYER_COUNT - 1) as f32 * -0.5 + player_id as f32) * height,
+                        -0.5 * height,
+                    );
+                if let Some(home_stack) = home_stack {
+                    self.draw_stack(
+                        ctx,
+                        &painter,
+                        home,
+                        height,
+                        home_stack.player(),
+                        home_stack.stack_size(),
+                    );
+                }
+
+                if let Some(pointer_pos) = canvas.hover_pos() {
+                    /* Did click end on this frame? drag_released() is much like clicked() but without
+                     * time or movement limit. */
+                    if canvas.drag_released() {
+                        if Rect::from_center_size(home, vec2(height, height)).contains(pointer_pos)
+                        {
+                            match home_stack {
+                                Some(home_stack) => {
+                                    if let None = self.hover_stack {
+                                        self.hover_stack = Some(HoverStack {
+                                            stack: home_stack,
+                                            origin: None,
+                                        });
+                                        self.home_stacks[player_id] = None;
+                                    }
+                                }
+                                None => {
+                                    if let Some(HoverStack {
+                                        stack: hover_stack,
+                                        origin: hover_origin,
+                                    }) = self.hover_stack
+                                    {
+                                        if hover_origin == None {
+                                            self.home_stacks[player_id] = Some(hover_stack);
+                                            self.hover_stack = None;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             if let Some(pointer_pos) = canvas.hover_pos() {
@@ -186,59 +220,6 @@ impl eframe::App for BattleSheepApp {
                 /* Did click end on this frame? drag_released() is much like clicked() but without
                  * time or movement limit. */
                 if canvas.drag_released() {
-                    if Rect::from_center_size(max_home, vec2(height, height)).contains(pointer_pos)
-                    {
-                        match self.max_home_stack {
-                            Some(max_home_stack) => {
-                                if let None = self.hover_stack {
-                                    self.hover_stack = Some(HoverStack {
-                                        stack: max_home_stack,
-                                        origin: None,
-                                    });
-                                    self.max_home_stack = None;
-                                }
-                            }
-                            None => {
-                                if let Some(HoverStack {
-                                    stack: hover_stack,
-                                    origin: hover_origin,
-                                }) = self.hover_stack
-                                {
-                                    if hover_origin == None {
-                                        self.max_home_stack = Some(hover_stack);
-                                        self.hover_stack = None;
-                                    }
-                                }
-                            }
-                        }
-                    } else if Rect::from_center_size(min_home, vec2(height, height))
-                        .contains(pointer_pos)
-                    {
-                        match self.min_home_stack {
-                            Some(min_home_stack) => {
-                                if let None = self.hover_stack {
-                                    self.hover_stack = Some(HoverStack {
-                                        stack: min_home_stack,
-                                        origin: None,
-                                    });
-                                    self.min_home_stack = None;
-                                }
-                            }
-                            None => {
-                                if let Some(HoverStack {
-                                    stack: hover_stack,
-                                    origin: hover_origin,
-                                }) = self.hover_stack
-                                {
-                                    if hover_origin == None {
-                                        self.min_home_stack = Some(hover_stack);
-                                        self.hover_stack = None;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     let mut clicked_coords = pointer_coords;
                     let clicked_tile = self.board[clicked_coords];
                     match clicked_tile.tile_type() {

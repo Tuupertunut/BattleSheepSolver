@@ -61,7 +61,7 @@ fn possible_moves_are_found() {
     assert_eq!(
         Board::parse(input)
             .unwrap()
-            .possible_moves(Player::Max)
+            .possible_moves(Player(1))
             .collect::<HashSet<Board>>(),
         max_moves
             .iter()
@@ -113,7 +113,7 @@ fn possible_starting_moves_are_found() {
     assert_eq!(
         Board::parse(input)
             .unwrap()
-            .possible_moves(Player::Min)
+            .possible_moves(Player(0))
             .collect::<HashSet<Board>>(),
         min_moves
             .iter()
@@ -243,13 +243,13 @@ fn ai_chooses_only_option_and_loses() {
 "
     .trim_matches('\n');
     let (next_board, val, visited) = choose_move(
-        Player::Max,
+        Player(1),
         &Board::parse(max_can_move).unwrap(),
         2,
         i32::MIN + 1,
         i32::MAX,
     );
-    let value = Player::Max.sign() * val;
+    let value = Player(1).direction() * val;
     assert_eq!(next_board, Some(Board::parse(max_moved).unwrap()));
     assert_eq!(value, -1000000);
     assert!(visited > 0);
@@ -274,13 +274,13 @@ fn ai_chooses_immediate_win() {
 "
     .trim_matches('\n');
     let (next_board, val, visited) = choose_move(
-        Player::Min,
+        Player(0),
         &Board::parse(min_will_win).unwrap(),
         5,
         i32::MIN + 1,
         i32::MAX,
     );
-    let value = Player::Min.sign() * val;
+    let value = Player(0).direction() * val;
     assert_eq!(next_board, Some(Board::parse(min_wins).unwrap()));
     assert_eq!(value, -1000000);
     assert!(visited > 0);

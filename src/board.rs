@@ -7,24 +7,31 @@ use std::{
 };
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
-pub enum Player {
-    Min,
-    Max,
-}
+pub struct Player(pub u8);
 
 impl Player {
-    pub fn sign(self) -> i32 {
-        match self {
-            Self::Min => -1,
-            Self::Max => 1,
-        }
+    pub const PLAYER_COUNT: u8 = 2;
+
+    pub fn iter() -> impl Iterator<Item = Player> {
+        return (0..Self::PLAYER_COUNT).map(|id| Player(id));
     }
 
-    pub fn opposite(self) -> Player {
-        match self {
-            Player::Min => Player::Max,
-            Player::Max => Player::Min,
-        }
+    pub const fn id(self) -> u8 {
+        return self.0;
+    }
+
+    /* The direction where this player is trying to push the game value. */
+    pub fn direction(self) -> i32 {
+        return match self.0 {
+            0 => -1,
+            1 => 1,
+            _ => unreachable!(),
+        };
+    }
+
+    /* The player whose turn is next. */
+    pub fn next(self) -> Player {
+        return Player((self.0 + 1) % Self::PLAYER_COUNT);
     }
 }
 
@@ -38,11 +45,11 @@ pub enum TileType {
 /* Custom bitfield struct for saving a Battle Sheep tile into a single byte.
  * Structure:
  * 2 bits tile_type, 00 = Stack, 01 = NoTile, 10 or 11 = Empty
- * 1 bits player, 0 = Min, 1 = Max
+ * 1 bits player
  * 5 bits stack_size, offset by -1
  * Numerically:
- * 0-31 = Min player's Stack with size 1-32
- * 32-63 = Max player's Stack with size 1-32
+ * 0-31 = Player 0 Stack with size 1-32
+ * 32-63 = Player 1 Stack with size 1-32
  * 64-127 = NoTile
  * 128-255 = Empty */
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
@@ -51,15 +58,12 @@ pub struct Tile(pub u8);
 impl Tile {
     pub const MAX_STACK_SIZE: u8 = 32;
 
-    pub const NO_TILE: Self = Self::new(TileType::NoTile, Player::Min, 1);
-    pub const EMPTY: Self = Self::new(TileType::Empty, Player::Min, 1);
+    pub const NO_TILE: Self = Self::new(TileType::NoTile, Player(0), 1);
+    pub const EMPTY: Self = Self::new(TileType::Empty, Player(0), 1);
 
     pub const fn new(tile_type: TileType, player: Player, stack_size: u8) -> Self {
         let bitfield = stack_size - 1
-            + match player {
-                Player::Min => 0,
-                Player::Max => 32,
-            }
+            + player.id() * 32
             + match tile_type {
                 TileType::Stack => 0,
                 TileType::NoTile => 64,
@@ -83,11 +87,7 @@ impl Tile {
     }
 
     pub fn player(self) -> Player {
-        if self.0 < 32 {
-            return Player::Min;
-        } else {
-            return Player::Max;
-        }
+        return Player(self.0 / 32);
     }
 
     pub fn stack_size(self) -> u8 {
@@ -371,8 +371,8 @@ impl Board {
                     tiles.push(Tile::EMPTY);
                 } else {
                     let player = match &tile_content[..1] {
-                        "-" => Player::Min,
-                        "+" => Player::Max,
+                        "-" => Player(0),
+                        "+" => Player(1),
                         _ => return Err("Invalid tile")?,
                     };
 
@@ -423,8 +423,9 @@ impl Board {
                     }
                     TileType::Stack => {
                         let (symbol, color) = match tile.player() {
-                            Player::Min => ("-", RED),
-                            Player::Max => ("+", BLUE),
+                            Player(0) => ("-", RED),
+                            Player(1) => ("+", BLUE),
+                            _ => unreachable!(),
                         };
                         if colored {
                             format!("{}{}{:<3}{}", color, symbol, tile.stack_size(), RESET)
@@ -504,25 +505,29 @@ impl Board {
         });
     }
 
-    /* Evaluates the current board state. Positive number means Max has an advantage, negative means
-     * Min has it. This is a very simple evaluation function that checks how blocked the stacks are
-     * by their neighbors and how evenly split they are. In the endgame, another heuristic is used. */
+    /* Evaluates the current board state. The more the value is in one player's direction, the more
+     * advantage they have. This is a very simple evaluation function that checks how blocked the
+     * stacks are by their neighbors and how evenly split they are. In the endgame, another
+     * heuristic is used. */
     pub fn heuristic_evaluate(&self) -> i32 {
         let mut value = 0;
-        let mut max_all_blocked = true;
-        let mut min_all_blocked = true;
-        let mut max_stacks = 0;
-        let mut min_stacks = 0;
+        let mut player_all_blocked = [true; Player::PLAYER_COUNT as usize];
+        let mut player_stacks = [0; Player::PLAYER_COUNT as usize];
 
-        let mut max_largest_stack = 0;
-        let mut max_smallest_stack = i32::MAX;
-        let mut min_largest_stack = 0;
-        let mut min_smallest_stack = i32::MAX;
+        let mut player_smallest_stack = [i32::MAX; Player::PLAYER_COUNT as usize];
+        let mut player_largest_stack = [0; Player::PLAYER_COUNT as usize];
 
         for (coords, tile) in self.iter_row_major() {
             if tile.is_stack() {
                 let player = tile.player();
                 let size = tile.stack_size();
+                let player_id = player.id() as usize;
+
+                player_stacks[player_id] += 1;
+                player_largest_stack[player_id] =
+                    i32::max(player_largest_stack[player_id], size as i32);
+                player_smallest_stack[player_id] =
+                    i32::min(player_smallest_stack[player_id], size as i32);
 
                 /* A maximum of 6 directions are blocked. */
                 let mut blocked_directions = 6;
@@ -533,75 +538,63 @@ impl Board {
                 }
 
                 if size > 1 && blocked_directions < 6 {
-                    match player {
-                        Player::Min => min_all_blocked = false,
-                        Player::Max => max_all_blocked = false,
-                    }
+                    player_all_blocked[player_id] = false;
                 }
 
                 /* Being surrounded from more sides and having more sheep in the stack increase
                  * its blocked score. */
                 let blocked_score = (size as i32 - 1) * blocked_directions;
 
-                match player {
-                    Player::Min => {
-                        /* A blocked Min stack gives an advantage to Max and therefore increases the
-                         * value of the board. Vice versa for Max. */
-                        value += blocked_score;
-                        min_stacks += 1;
-                        min_largest_stack = i32::max(min_largest_stack, size as i32);
-                        min_smallest_stack = i32::min(min_smallest_stack, size as i32);
-                    }
-                    Player::Max => {
-                        value -= blocked_score;
-                        max_stacks += 1;
-                        max_largest_stack = i32::max(max_largest_stack, size as i32);
-                        max_smallest_stack = i32::min(max_smallest_stack, size as i32);
-                    }
-                }
+                /* A blocked stack gives a disadvantage to the player, so the board value is moved
+                 * away from the player's direction. */
+                value -= blocked_score * player.direction();
             }
         }
 
         /* Extra score for splitting stacks evenly. This does not matter as much as being blocked,
          * the maximum splitting bonus is 7. */
-        value += (min_largest_stack - min_smallest_stack) / 2;
-        value -= (max_largest_stack - max_smallest_stack) / 2;
+        for player in Player::iter() {
+            let player_id = player.id() as usize;
+            let uneven_score =
+                (player_largest_stack[player_id] - player_smallest_stack[player_id]) / 2;
+            value -= uneven_score * player.direction();
+        }
 
-        /* If at least on player is blocked, use end game evaluation instead.
+        /* If at least one player is blocked, use end game evaluation instead.
          *
          * Both players are blocked, so the game is over and the winner can be determined. */
-        if min_all_blocked && max_all_blocked {
-            if max_stacks > min_stacks {
+        if player_all_blocked[0] && player_all_blocked[1] {
+            if player_stacks[1] > player_stacks[0] {
                 value = 1000000;
-            } else if min_stacks > max_stacks {
+            } else if player_stacks[0] > player_stacks[1] {
                 value = -1000000;
             } else {
                 value = match self.largest_connected_field_holder() {
-                    Some(Player::Max) => 1000000,
-                    Some(Player::Min) => -1000000,
-                    None => 0,
+                    Some(Player(1)) => 1000000,
+                    Some(Player(0)) => -1000000,
+                    _ => 0,
                 }
             }
         /* Only one player is blocked. In most cases this means that the blocked player has lost. In
          * the rare case that the beginning player has blocked themselves, there is a chance that
          * they might still win. */
-        } else if min_all_blocked {
-            if max_stacks >= min_stacks {
+        } else if player_all_blocked[0] {
+            if player_stacks[1] >= player_stacks[0] {
                 value = 1000000;
             } else {
                 /* The rare case where the blocked player might still win. However, if the other
                  * player already has a larger connected field, the blocked player will lose. If
                  * not, the game is not yet over and we fall back to the normal heuristic
                  * evaluation. */
-                if let Some(Player::Max) = self.largest_connected_field_holder() {
+                if let Some(Player(1)) = self.largest_connected_field_holder() {
                     value = 1000000;
                 }
             }
-        } else if max_all_blocked {
-            if min_stacks >= max_stacks {
+        } else if player_all_blocked[1] {
+            if player_stacks[0] >= player_stacks[1] {
                 value = -1000000;
             } else {
-                if let Some(Player::Min) = self.largest_connected_field_holder() {
+                if let Some(Player(0)) = self.largest_connected_field_holder() {
                     value = -1000000;
                 }
             }
@@ -612,8 +605,7 @@ impl Board {
 
     /* Tells which player has the largest connected field. */
     pub fn largest_connected_field_holder(&self) -> Option<Player> {
-        let mut min_largest_field = 0;
-        let mut max_largest_field = 0;
+        let mut player_largest_field = [0; Player::PLAYER_COUNT as usize];
 
         let mut visited = vec![false; self.tiles.len()];
         let mut dfs_stack = Vec::<(isize, isize)>::new();
@@ -621,6 +613,7 @@ impl Board {
         for (start_coords, tile) in self.iter_row_major() {
             if tile.is_stack() && !visited[self.coords_to_index(start_coords)] {
                 let player = tile.player();
+                let player_id = player.id() as usize;
                 let mut field_size = 0;
 
                 /* Depth-first search for counting the size of a connected field. */
@@ -640,20 +633,15 @@ impl Board {
                     }
                 }
 
-                match player {
-                    Player::Min => {
-                        min_largest_field = u32::max(min_largest_field, field_size);
-                    }
-                    Player::Max => {
-                        max_largest_field = u32::max(max_largest_field, field_size);
-                    }
-                }
+                player_largest_field[player_id] =
+                    u32::max(player_largest_field[player_id], field_size);
             }
         }
-        return if min_largest_field > max_largest_field {
-            Some(Player::Min)
-        } else if max_largest_field > min_largest_field {
-            Some(Player::Max)
+
+        return if player_largest_field[0] > player_largest_field[1] {
+            Some(Player(0))
+        } else if player_largest_field[1] > player_largest_field[0] {
+            Some(Player(1))
         } else {
             None
         };
