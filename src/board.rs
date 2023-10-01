@@ -10,14 +10,14 @@ use std::{
 pub struct Player(pub u8);
 
 impl Player {
-    pub const PLAYER_COUNT: u8 = 2;
+    pub const PLAYER_COUNT: usize = 2;
 
     pub fn iter() -> impl Iterator<Item = Player> {
-        return (0..Self::PLAYER_COUNT).map(|id| Player(id));
+        return (0..Self::PLAYER_COUNT as u8).map(|id| Player(id));
     }
 
-    pub const fn id(self) -> u8 {
-        return self.0;
+    pub const fn id(self) -> usize {
+        return self.0 as usize;
     }
 
     /* The direction where this player is trying to push the game value. */
@@ -31,7 +31,7 @@ impl Player {
 
     /* The player whose turn is next. */
     pub fn next(self) -> Player {
-        return Player((self.0 + 1) % Self::PLAYER_COUNT);
+        return Player((self.0 + 1) % Self::PLAYER_COUNT as u8);
     }
 }
 
@@ -63,7 +63,7 @@ impl Tile {
 
     pub const fn new(tile_type: TileType, player: Player, stack_size: u8) -> Self {
         let bitfield = stack_size - 1
-            + player.id() * 32
+            + player.0 * 32
             + match tile_type {
                 TileType::Stack => 0,
                 TileType::NoTile => 64,
@@ -511,23 +511,22 @@ impl Board {
      * heuristic is used. */
     pub fn heuristic_evaluate(&self) -> i32 {
         let mut value = 0;
-        let mut player_all_blocked = [true; Player::PLAYER_COUNT as usize];
-        let mut player_stacks = [0; Player::PLAYER_COUNT as usize];
+        let mut player_all_blocked = [true; Player::PLAYER_COUNT];
+        let mut player_stacks = [0; Player::PLAYER_COUNT];
 
-        let mut player_smallest_stack = [i32::MAX; Player::PLAYER_COUNT as usize];
-        let mut player_largest_stack = [0; Player::PLAYER_COUNT as usize];
+        let mut player_smallest_stack = [u8::MAX; Player::PLAYER_COUNT];
+        let mut player_largest_stack = [0; Player::PLAYER_COUNT];
 
         for (coords, tile) in self.iter_row_major() {
             if tile.is_stack() {
                 let player = tile.player();
                 let size = tile.stack_size();
-                let player_id = player.id() as usize;
 
-                player_stacks[player_id] += 1;
-                player_largest_stack[player_id] =
-                    i32::max(player_largest_stack[player_id], size as i32);
-                player_smallest_stack[player_id] =
-                    i32::min(player_smallest_stack[player_id], size as i32);
+                player_stacks[player.id()] += 1;
+                player_largest_stack[player.id()] =
+                    u8::max(player_largest_stack[player.id()], size);
+                player_smallest_stack[player.id()] =
+                    u8::min(player_smallest_stack[player.id()], size);
 
                 /* A maximum of 6 directions are blocked. */
                 let mut blocked_directions = 6;
@@ -538,7 +537,7 @@ impl Board {
                 }
 
                 if size > 1 && blocked_directions < 6 {
-                    player_all_blocked[player_id] = false;
+                    player_all_blocked[player.id()] = false;
                 }
 
                 /* Being surrounded from more sides and having more sheep in the stack increase
@@ -554,9 +553,9 @@ impl Board {
         /* Extra score for splitting stacks evenly. This does not matter as much as being blocked,
          * the maximum splitting bonus is 7. */
         for player in Player::iter() {
-            let player_id = player.id() as usize;
-            let uneven_score =
-                (player_largest_stack[player_id] - player_smallest_stack[player_id]) / 2;
+            let uneven_score = (player_largest_stack[player.id()] as i32
+                - player_smallest_stack[player.id()] as i32)
+                / 2;
             value -= uneven_score * player.direction();
         }
 
@@ -565,7 +564,7 @@ impl Board {
             /* All players who have the most stacks. */
             let most_stacks = *player_stacks.iter().max().unwrap();
             let most_stack_holders = Player::iter()
-                .filter(|p| player_stacks[p.id() as usize] == most_stacks)
+                .filter(|p| player_stacks[p.id()] == most_stacks)
                 .collect::<Vec<_>>();
 
             let largest_fields = self.largest_connected_fields();
@@ -573,12 +572,12 @@ impl Board {
             /* All players who have the largest fields out of those who have the most stacks. */
             let largest_field = most_stack_holders
                 .iter()
-                .map(|p| largest_fields[p.id() as usize])
+                .map(|p| largest_fields[p.id()])
                 .max()
                 .unwrap();
             let winners = most_stack_holders
                 .iter()
-                .filter(|p| largest_fields[p.id() as usize] == largest_field);
+                .filter(|p| largest_fields[p.id()] == largest_field);
 
             /* Set value to one million in the winners' directions. */
             value = 0;
@@ -591,8 +590,8 @@ impl Board {
     }
 
     /* Returns the largest connected fields for every player. */
-    pub fn largest_connected_fields(&self) -> [u32; Player::PLAYER_COUNT as usize] {
-        let mut player_largest_field = [0; Player::PLAYER_COUNT as usize];
+    pub fn largest_connected_fields(&self) -> [u32; Player::PLAYER_COUNT] {
+        let mut player_largest_field = [0; Player::PLAYER_COUNT];
 
         let mut visited = vec![false; self.tiles.len()];
         let mut dfs_stack = Vec::<(isize, isize)>::new();
@@ -600,7 +599,6 @@ impl Board {
         for (start_coords, tile) in self.iter_row_major() {
             if tile.is_stack() && !visited[self.coords_to_index(start_coords)] {
                 let player = tile.player();
-                let player_id = player.id() as usize;
                 let mut field_size = 0;
 
                 /* Depth-first search for counting the size of a connected field. */
@@ -620,8 +618,8 @@ impl Board {
                     }
                 }
 
-                player_largest_field[player_id] =
-                    u32::max(player_largest_field[player_id], field_size);
+                player_largest_field[player.id()] =
+                    u32::max(player_largest_field[player.id()], field_size);
             }
         }
 

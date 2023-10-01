@@ -25,7 +25,7 @@ struct HoverStack {
 struct BattleSheepApp {
     board: Board,
     hover_stack: Option<HoverStack>,
-    home_stacks: [Option<Tile>; Player::PLAYER_COUNT as usize],
+    home_stacks: [Option<Tile>; Player::PLAYER_COUNT],
     red_image: RetainedImage,
     blue_image: RetainedImage,
 }
@@ -160,12 +160,11 @@ impl eframe::App for BattleSheepApp {
             }
 
             for player in Player::iter() {
-                let player_id = player.id() as usize;
-                let home_stack = self.home_stacks[player_id];
+                let home_stack = self.home_stacks[player.id()];
 
                 let home = canvas.rect.center_bottom()
                     + vec2(
-                        ((Player::PLAYER_COUNT - 1) as f32 * -0.5 + player_id as f32) * height,
+                        ((Player::PLAYER_COUNT - 1) as f32 * -0.5 + player.id() as f32) * height,
                         -0.5 * height,
                     );
                 if let Some(home_stack) = home_stack {
@@ -192,7 +191,7 @@ impl eframe::App for BattleSheepApp {
                                             stack: home_stack,
                                             origin: None,
                                         });
-                                        self.home_stacks[player_id] = None;
+                                        self.home_stacks[player.id()] = None;
                                     }
                                 }
                                 None => {
@@ -202,7 +201,7 @@ impl eframe::App for BattleSheepApp {
                                     }) = self.hover_stack
                                     {
                                         if hover_origin == None {
-                                            self.home_stacks[player_id] = Some(hover_stack);
+                                            self.home_stacks[player.id()] = Some(hover_stack);
                                             self.hover_stack = None;
                                         }
                                     }
