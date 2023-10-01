@@ -560,51 +560,38 @@ impl Board {
             value -= uneven_score * player.direction();
         }
 
-        /* If at least one player is blocked, use end game evaluation instead.
-         *
-         * Both players are blocked, so the game is over and the winner can be determined. */
-        if player_all_blocked[0] && player_all_blocked[1] {
-            if player_stacks[1] > player_stacks[0] {
-                value = 1000000;
-            } else if player_stacks[0] > player_stacks[1] {
-                value = -1000000;
-            } else {
-                value = match self.largest_connected_field_holder() {
-                    Some(Player(1)) => 1000000,
-                    Some(Player(0)) => -1000000,
-                    _ => 0,
-                }
-            }
-        /* Only one player is blocked. In most cases this means that the blocked player has lost. In
-         * the rare case that the beginning player has blocked themselves, there is a chance that
-         * they might still win. */
-        } else if player_all_blocked[0] {
-            if player_stacks[1] >= player_stacks[0] {
-                value = 1000000;
-            } else {
-                /* The rare case where the blocked player might still win. However, if the other
-                 * player already has a larger connected field, the blocked player will lose. If
-                 * not, the game is not yet over and we fall back to the normal heuristic
-                 * evaluation. */
-                if let Some(Player(1)) = self.largest_connected_field_holder() {
-                    value = 1000000;
-                }
-            }
-        } else if player_all_blocked[1] {
-            if player_stacks[0] >= player_stacks[1] {
-                value = -1000000;
-            } else {
-                if let Some(Player(0)) = self.largest_connected_field_holder() {
-                    value = -1000000;
-                }
+        /* If all players are blocked, the game is over and the winner can be determined. */
+        if player_all_blocked.iter().all(|&b| b) {
+            /* All players who have the most stacks. */
+            let most_stacks = *player_stacks.iter().max().unwrap();
+            let most_stack_holders = Player::iter()
+                .filter(|p| player_stacks[p.id() as usize] == most_stacks)
+                .collect::<Vec<_>>();
+
+            let largest_fields = self.largest_connected_fields();
+
+            /* All players who have the largest fields out of those who have the most stacks. */
+            let largest_field = most_stack_holders
+                .iter()
+                .map(|p| largest_fields[p.id() as usize])
+                .max()
+                .unwrap();
+            let winners = most_stack_holders
+                .iter()
+                .filter(|p| largest_fields[p.id() as usize] == largest_field);
+
+            /* Set value to one million in the winners' directions. */
+            value = 0;
+            for &player in winners {
+                value += 1000000 * player.direction();
             }
         }
 
         return value;
     }
 
-    /* Tells which player has the largest connected field. */
-    pub fn largest_connected_field_holder(&self) -> Option<Player> {
+    /* Returns the largest connected fields for every player. */
+    pub fn largest_connected_fields(&self) -> [u32; Player::PLAYER_COUNT as usize] {
         let mut player_largest_field = [0; Player::PLAYER_COUNT as usize];
 
         let mut visited = vec![false; self.tiles.len()];
@@ -638,12 +625,6 @@ impl Board {
             }
         }
 
-        return if player_largest_field[0] > player_largest_field[1] {
-            Some(Player(0))
-        } else if player_largest_field[1] > player_largest_field[0] {
-            Some(Player(1))
-        } else {
-            None
-        };
+        return player_largest_field;
     }
 }
