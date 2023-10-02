@@ -5,6 +5,7 @@ use eframe::{
     epaint::{pos2, vec2, Color32, FontId, Pos2, Rect, Shape, Stroke},
 };
 use egui_extras::RetainedImage;
+use once_cell::sync::Lazy;
 
 fn main() {
     let mut options = eframe::NativeOptions::default();
@@ -26,8 +27,6 @@ struct BattleSheepApp {
     board: Board,
     hover_stack: Option<HoverStack>,
     home_stacks: [Option<Tile>; Player::PLAYER_COUNT],
-    red_image: RetainedImage,
-    blue_image: RetainedImage,
 }
 
 impl BattleSheepApp {
@@ -43,67 +42,7 @@ impl BattleSheepApp {
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap(),
-            red_image: RetainedImage::from_image_bytes(
-                "redsheep.png",
-                include_bytes!("redsheep.png"),
-            )
-            .unwrap(),
-            blue_image: RetainedImage::from_image_bytes(
-                "bluesheep.png",
-                include_bytes!("bluesheep.png"),
-            )
-            .unwrap(),
         };
-    }
-
-    const TILE_COLOR: Color32 = Color32::GREEN;
-    const HIGHLIGHT_COLOR: Color32 = Color32::from_rgb(0, 255, 180);
-    const PATH_HIGHLIGHT_COLOR: Color32 = Color32::from_rgb(140, 220, 0);
-
-    fn draw_empty_tile(&self, painter: &Painter, middle_point: Pos2, height: f32, color: Color32) {
-        let quarter_height = height / 4.0;
-        let half_width = f32::sqrt(3.0) * quarter_height;
-        painter.add(Shape::convex_polygon(
-            vec![
-                middle_point + vec2(0.0, -2.0 * quarter_height),
-                middle_point + vec2(half_width, -quarter_height),
-                middle_point + vec2(half_width, quarter_height),
-                middle_point + vec2(0.0, 2.0 * quarter_height),
-                middle_point + vec2(-half_width, quarter_height),
-                middle_point + vec2(-half_width, -quarter_height),
-            ],
-            color,
-            Stroke::new(height * 0.08, Color32::DARK_GREEN),
-        ));
-    }
-
-    fn draw_stack(
-        &self,
-        ctx: &egui::Context,
-        painter: &Painter,
-        middle_point: Pos2,
-        height: f32,
-        player: Player,
-        stack_size: u8,
-    ) {
-        let image = match player {
-            Player(0) => &self.red_image,
-            Player(1) => &self.blue_image,
-            _ => unreachable!(),
-        };
-        painter.image(
-            image.texture_id(ctx),
-            Rect::from_center_size(middle_point, vec2(height * 0.65, height * 0.65)),
-            Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)),
-            Color32::WHITE,
-        );
-        painter.text(
-            middle_point,
-            Align2::CENTER_CENTER,
-            format!("{}", stack_size),
-            FontId::proportional(height * 0.5),
-            Color32::WHITE,
-        );
     }
 }
 
@@ -144,10 +83,10 @@ impl eframe::App for BattleSheepApp {
                 if tile.is_board_tile() {
                     let middle_point = hex_to_middle_point(hex_coords, grid_start, height);
 
-                    self.draw_empty_tile(&painter, middle_point, height, Self::TILE_COLOR);
+                    draw_empty_tile(&painter, middle_point, height, TILE_COLOR);
 
                     if tile.is_stack() {
-                        self.draw_stack(
+                        draw_stack(
                             ctx,
                             &painter,
                             middle_point,
@@ -168,7 +107,7 @@ impl eframe::App for BattleSheepApp {
                         -0.5 * height,
                     );
                 if let Some(home_stack) = home_stack {
-                    self.draw_stack(
+                    draw_stack(
                         ctx,
                         &painter,
                         home,
@@ -360,36 +299,36 @@ impl eframe::App for BattleSheepApp {
                             for &dir in DIRECTION_OFFSETS.iter() {
                                 for coords in self.board.iter_empty_straight_line(hover_origin, dir)
                                 {
-                                    self.draw_empty_tile(
+                                    draw_empty_tile(
                                         &painter,
                                         hex_to_middle_point(coords, grid_start, height),
                                         height,
-                                        Self::PATH_HIGHLIGHT_COLOR,
+                                        PATH_HIGHLIGHT_COLOR,
                                     );
                                 }
                             }
                             for coords in self.board.iter_empty_straight_line_ends(hover_origin) {
-                                self.draw_empty_tile(
+                                draw_empty_tile(
                                     &painter,
                                     hex_to_middle_point(coords, grid_start, height),
                                     height,
-                                    Self::HIGHLIGHT_COLOR,
+                                    HIGHLIGHT_COLOR,
                                 );
                             }
                         }
                         None => {
                             for coords in self.board.iter_empty_outer_edge() {
-                                self.draw_empty_tile(
+                                draw_empty_tile(
                                     &painter,
                                     hex_to_middle_point(coords, grid_start, height),
                                     height,
-                                    Self::HIGHLIGHT_COLOR,
+                                    HIGHLIGHT_COLOR,
                                 );
                             }
                         }
                     }
 
-                    self.draw_stack(
+                    draw_stack(
                         ctx,
                         &painter,
                         pointer_pos,
@@ -401,6 +340,62 @@ impl eframe::App for BattleSheepApp {
             }
         });
     }
+}
+
+const TILE_COLOR: Color32 = Color32::GREEN;
+const HIGHLIGHT_COLOR: Color32 = Color32::from_rgb(0, 255, 180);
+const PATH_HIGHLIGHT_COLOR: Color32 = Color32::from_rgb(140, 220, 0);
+
+fn draw_empty_tile(painter: &Painter, middle_point: Pos2, height: f32, color: Color32) {
+    let quarter_height = height / 4.0;
+    let half_width = f32::sqrt(3.0) * quarter_height;
+    painter.add(Shape::convex_polygon(
+        vec![
+            middle_point + vec2(0.0, -2.0 * quarter_height),
+            middle_point + vec2(half_width, -quarter_height),
+            middle_point + vec2(half_width, quarter_height),
+            middle_point + vec2(0.0, 2.0 * quarter_height),
+            middle_point + vec2(-half_width, quarter_height),
+            middle_point + vec2(-half_width, -quarter_height),
+        ],
+        color,
+        Stroke::new(height * 0.08, Color32::DARK_GREEN),
+    ));
+}
+
+static RED_IMAGE: Lazy<RetainedImage> = Lazy::new(|| {
+    RetainedImage::from_image_bytes("redsheep.png", include_bytes!("redsheep.png")).unwrap()
+});
+static BLUE_IMAGE: Lazy<RetainedImage> = Lazy::new(|| {
+    RetainedImage::from_image_bytes("bluesheep.png", include_bytes!("bluesheep.png")).unwrap()
+});
+
+fn draw_stack(
+    ctx: &egui::Context,
+    painter: &Painter,
+    middle_point: Pos2,
+    height: f32,
+    player: Player,
+    stack_size: u8,
+) {
+    let image = match player {
+        Player(0) => &RED_IMAGE,
+        Player(1) => &BLUE_IMAGE,
+        _ => unreachable!(),
+    };
+    painter.image(
+        image.texture_id(ctx),
+        Rect::from_center_size(middle_point, vec2(height * 0.65, height * 0.65)),
+        Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)),
+        Color32::WHITE,
+    );
+    painter.text(
+        middle_point,
+        Align2::CENTER_CENTER,
+        format!("{}", stack_size),
+        FontId::proportional(height * 0.5),
+        Color32::WHITE,
+    );
 }
 
 fn hex_to_middle_point((r, q): (isize, isize), grid_start: Pos2, height: f32) -> Pos2 {

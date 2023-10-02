@@ -341,6 +341,7 @@ dependencies = [
  "either",
  "image",
  "next-gen",
+ "once_cell",
  "rayon",
 ]
 
